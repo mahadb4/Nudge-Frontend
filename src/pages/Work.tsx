@@ -3,6 +3,8 @@ import { Icon } from '../components/Icons'
 import { Avatar, contactById, useTitle } from '../components/ui'
 import { AgentPanel } from '../components/AgentPanel'
 import { sendFollowup, toast, useStore } from '../store'
+import { LIMITS, cleanMulti, textErr } from '../data/validate'
+const draftErr = (v: string) => textErr(v, 'draft', 5, LIMITS.body)
 
 export function FollowUps() {
   useTitle('Follow-ups')
@@ -28,9 +30,9 @@ export function FollowUps() {
             {isOpen && (
               <div className="fu-open">
                 <div className="to">To <span className="mono">{c.email}</span></div>
-                <textarea className="textarea" value={drafts[f.id] ?? f.draft} onChange={(e) => setDrafts({ ...drafts, [f.id]: e.target.value })} aria-label="Follow-up draft" />
+                <textarea className={'textarea' + (draftErr(drafts[f.id] ?? f.draft) ? ' invalid' : '')} maxLength={LIMITS.body + 50} value={drafts[f.id] ?? f.draft} onChange={(e) => setDrafts({ ...drafts, [f.id]: e.target.value })} aria-label="Follow-up draft" />{draftErr(drafts[f.id] ?? f.draft) && <span className="err">{draftErr(drafts[f.id] ?? f.draft)}</span>}
                 <div className="row" style={{ marginTop: 12 }}>
-                  <button className="btn approve" onClick={() => { sendFollowup(f.id, drafts[f.id] ?? f.draft); setOpen(null) }}><Icon n="check" s={16} w={2.4} />Approve &amp; queue</button>
+                  <button className="btn approve" disabled={!!draftErr(drafts[f.id] ?? f.draft)} onClick={() => { sendFollowup(f.id, cleanMulti(drafts[f.id] ?? f.draft)); setOpen(null) }}><Icon n="check" s={16} w={2.4} />Approve &amp; queue</button>
                   <button className="btn" onClick={() => toast('Snoozed until tomorrow')}>Snooze a day</button>
                 </div>
               </div>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Icon } from '../components/Icons'
 import { Avatar, Conf, Evidence, Kbd, ReplyMark, companyName, contactById, useTitle } from '../components/ui'
 import { approveReview, rejectReview, resetReviews, setReviewDraft, setReviewType, skipReview, toggleAction, useStore } from '../store'
+import { LIMITS, clean } from '../data/validate'
 import { REPLY_TYPES, rtLabel } from '../data/seed'
 
 const REASONS = ['Wrong tone', 'Wrong facts', 'Wrong reply type', 'Too long', 'Should not reply', 'Other']
@@ -34,7 +35,8 @@ export function Review() {
   const confirmReject = () => {
     if (!cur) return
     if (!reason) { setErr(true); return }
-    rejectReview(cur.id, reason + (note ? ': ' + note : '')); advance(cur.id)
+    if (!REASONS.includes(reason)) { setErr(true); return }
+    rejectReview(cur.id, reason + (clean(note) ? ': ' + clean(note).slice(0, LIMITS.note) : '')); advance(cur.id)
   }
   const move = (d: number) => {
     if (!pending.length) return
@@ -148,7 +150,7 @@ export function Review() {
           ))}
 
           <div className="reply-h"><span>Draft reply</span>{cur.usedFacts.length > 0 && <span className="facts-tag"><Icon n="check" s={13} w={2.4} />Used {cur.usedFacts.join(', ')}</span>}</div>
-          <textarea className="textarea" rows={9} value={cur.draft} disabled={!isPending} onChange={(e) => setReviewDraft(cur.id, e.target.value)} aria-label="Draft reply" />
+          <textarea className={'textarea' + (!cur.draft.trim() && isPending ? ' invalid' : '')} rows={9} maxLength={5050} value={cur.draft} disabled={!isPending} onChange={(e) => setReviewDraft(cur.id, e.target.value)} aria-label="Draft reply" />
           <div className="count-hint">{words} words · From mahad@acme.co</div>
         </div>
       </div>
@@ -163,7 +165,7 @@ export function Review() {
               </select>
               {err && !reason && <span className="err">Pick a reason first</span>}
             </div>
-            <input className="input" placeholder="Add a note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <input className="input" placeholder="Add a note (optional)" maxLength={LIMITS.note} autoComplete="off" spellCheck value={note} onChange={(e) => setNote(e.target.value)} />
             <div className="row" style={{ justifyContent: 'flex-end' }}>
               <button className="btn" onClick={() => setRejecting(false)}>Cancel</button>
               <button className="btn danger solid" onClick={confirmReject}>Reject draft</button>

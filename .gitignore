@@ -1,0 +1,21 @@
+# dependencies and build output
+node_modules/
+dist/
+coverage/
+
+# secrets and local config. Only the example file is committed.
+.env
+.env.*
+!.env.example
+
+# test output
+test-results/
+playwright-report/
+playwright/.cache/
+
+# editor and OS
+*.log
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json

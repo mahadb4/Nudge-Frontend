@@ -42,6 +42,7 @@ export function AgentPanel({ onClose, page }: { onClose?: () => void; page?: boo
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [msgs, busy])
   const ask = (text: string) => {
     if (!text.trim() || busy) return
+    text = text.trim().slice(0, 500)
     setMsgs((m) => [...m, { me: true, text }]); setQ(''); setBusy(true)
     setTimeout(() => { setMsgs((m) => [...m, reply(text, agent)]); setBusy(false) }, 600)
   }
@@ -82,7 +83,7 @@ export function AgentPanel({ onClose, page }: { onClose?: () => void; page?: boo
       <div className="dr-suggest">{sug.map((x) => <button key={x} onClick={() => ask(x)}>{x}</button>)}</div>
       <div className="dr-input">
         <div className="dr-box">
-          <textarea className="textarea" rows={1} placeholder="Ask anything about your replies or deals" value={q} onChange={(e) => setQ(e.target.value)}
+          <textarea className="textarea" rows={1} maxLength={500} placeholder="Ask anything about your replies or deals" value={q} onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(q) } }} />
           <button className="send" aria-label="Send" onClick={() => ask(q)}><Icon n="send" s={16} /></button>
         </div>

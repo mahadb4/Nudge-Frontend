@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import * as seed from './data/seed'
+import { LIMITS, cleanMulti, normEmail } from './data/validate'
 import type { Deal, Contact, Company, ReviewItem, Followup, Thread, Template, Fact, Mailbox, Member, AuditRow, Stage, ReplyType } from './data/seed'
 
 export type Theme = 'light' | 'dark' | 'system'
@@ -11,7 +12,7 @@ export interface Settings {
   dealStages: string[]
 }
 export interface State {
-  user: { name: string; email: string; type: 'Individual' | 'Business'; verified: boolean } | null
+  user: User | null
   deals: Deal[]; contacts: Contact[]; companies: Company[]; reviews: ReviewItem[]; followups: Followup[]
   threads: Thread[]; templates: Template[]; facts: Fact[]; mailboxes: Mailbox[]; members: Member[]; audit: AuditRow[]
   events: typeof seed.events
@@ -19,20 +20,24 @@ export interface State {
   askOpen: boolean; cmdOpen: boolean; newEmailOpen: boolean; navOpen: boolean
 }
 
-const savedTheme = (() => { try { return (localStorage.getItem('nudge.theme') as Theme) || 'light' } catch { return 'light' as Theme } })()
+const isTheme = (v: unknown): v is Theme => v === 'light' || v === 'dark' || v === 'system'
+const savedTheme: Theme = (() => { try { const t = localStorage.getItem('nudge.theme'); return isTheme(t) ? t : 'light' } catch { return 'light' } })()
 
-let state: State = {
-  user: { name: 'Mahad Baig', email: 'mahad@acme.co', type: 'Business', verified: true },
-  deals: seed.deals, contacts: seed.contacts, companies: seed.companies, reviews: seed.reviews, followups: seed.followups,
-  threads: seed.threads, templates: seed.templates, facts: seed.facts, mailboxes: seed.mailboxes, members: seed.members, audit: seed.audit,
-  events: seed.events,
-  settings: {
-    theme: savedTheme, mode: 'draft', approvals: 32, threshold: 85, quietOn: true, quietFrom: '8:00 PM', quietTo: '8:00 AM', tz: 'Asia/Karachi',
-    notif: { review: true, followup: true, meeting: true, digest: false, mailbox: true }, ints: { google: true, microsoft: true, calendar: true, slack: false, hubspot: false, webhooks: false },
-    twoFA: false, dealStages: seed.STAGES.map((s) => s.label),
-  },
-  toasts: [], approvedToday: [], askOpen: false, cmdOpen: false, newEmailOpen: false, navOpen: false,
-}
+export type User = { name: string; email: string; type: 'Individual' | 'Business'; verified: boolean }
+
+const defaultSettings = (theme: Theme): Settings => ({
+  theme, mode: 'draft', approvals: 32, threshold: 85, quietOn: true, quietFrom: '8:00 PM', quietTo: '8:00 AM', tz: 'Asia/Karachi',
+  notif: { review: true, followup: true, meeting: true, digest: false, mailbox: true }, ints: { google: true, microsoft: true, calendar: true, slack: false, hubspot: false, webhooks: false },
+  twoFA: false, dealStages: seed.STAGES.map((s) => s.label),
+})
+
+/** Nothing private. The store is this until someone signs in, and again after sign-out. */
+const blank = (theme: Theme): State => ({
+  user: null, deals: [], contacts: [], companies: [], reviews: [], followups: [], threads: [], templates: [], facts: [], mailboxes: [], members: [], audit: [],
+  events: [], settings: defaultSettings(theme), toasts: [], approvedToday: [], askOpen: false, cmdOpen: false, newEmailOpen: false, navOpen: false,
+})
+
+let state: State = blank(savedTheme)
 const subs = new Set<() => void>()
 export const getState = () => state
 export function setState(fn: (s: State) => Partial<State>) {
@@ -52,7 +57,11 @@ export function setTheme(t: Theme) {
   applyTheme(t)
   setSettings({ theme: t })
 }
-export const setSettings = (p: Partial<Settings>) => setState((s) => ({ settings: { ...s.settings, ...p } }))
+export const setSettings = (p: Partial<Settings>) => setState((s) => {
+  const next = { ...s.settings, ...p }
+  if (p.threshold !== undefined) next.threshold = Number.isFinite(p.threshold) ? Math.min(99, Math.max(60, Math.round(p.threshold))) : s.settings.threshold
+  return { settings: next }
+})
 
 let tid = 1
 export function toast(text: string, undo?: () => void) {
@@ -96,7 +105,7 @@ export function addCompany(c: Omit<Company, 'id'>) {
 }
 
 /* ---- review ---- */
-export function setReviewDraft(id: string, draft: string) { setState((s) => ({ reviews: s.reviews.map((r) => (r.id === id ? { ...r, draft } : r)) })) }
+export function setReviewDraft(id: string, draft: string) { const d = cleanMulti(draft + '.').slice(0, -1).slice(0, LIMITS.body + 1); setState((s) => ({ reviews: s.reviews.map((r) => (r.id === id ? { ...r, draft: d } : r)) })) }
 export function setReviewType(id: string, type: ReplyType) { setState((s) => ({ reviews: s.reviews.map((r) => (r.id === id ? { ...r, type } : r)) })) }
 export function toggleAction(id: string, aid: string) {
   setState((s) => ({ reviews: s.reviews.map((r) => (r.id === id ? { ...r, actions: r.actions.map((a) => (a.id === aid ? { ...a, on: !a.on } : a)) } : r)) }))
@@ -104,7 +113,11 @@ export function toggleAction(id: string, aid: string) {
 export function approveReview(id: string) {
   const r = getState().reviews.find((x) => x.id === id)
   if (!r) return
+  if (r.status !== 'pending') return
   const c = getState().contacts.find((x) => x.id === r.contactId)!
+  if (c.status !== 'Active') { toast(c.name + ' is ' + c.status.toLowerCase() + '. Nudge will not send to them.'); return }
+  if (!r.draft.trim()) { toast('The draft is empty. Write a reply before approving.'); return }
+  if (r.draft.length > LIMITS.body) { toast('The draft is over ' + LIMITS.body + ' characters. Shorten it first.'); return }
   const prev = r.status
   const doneActions = r.actions.filter((a) => a.on)
   // effects
@@ -137,11 +150,14 @@ export function skipReview(id: string) { setState((s) => ({ reviews: s.reviews.m
 export function resetReviews() { setState((s) => ({ reviews: s.reviews.map((r) => ({ ...r, status: 'pending' })) })) }
 
 export function sendFollowup(id: string, draft: string) {
+  if (!draft.trim() || draft.length > LIMITS.body) { toast('The draft must be between 1 and ' + LIMITS.body + ' characters.'); return }
+  if (getState().followups.find((f) => f.id === id)?.done) return
   setState((s) => ({ followups: s.followups.map((f) => (f.id === id ? { ...f, done: true, draft } : f)) }))
   toast('Follow-up approved and queued')
 }
 export function sendNewEmail(to: string, subject: string) {
-  const c = getState().contacts.find((x) => x.email.toLowerCase() === to.toLowerCase())
+  const c = getState().contacts.find((x) => normEmail(x.email) === normEmail(to))
+  if (c && c.status !== 'Active') { toast(c.name + ' is ' + c.status.toLowerCase() + '. Nothing was queued.'); return }
   toast('Email queued to ' + (c?.name ?? to) + ': ' + subject)
   logAudit('Sent new email', c?.name ?? to)
 }
@@ -149,3 +165,19 @@ export function sendNewEmail(to: string, subject: string) {
 export function patch<K extends 'templates' | 'facts' | 'mailboxes' | 'members'>(key: K, fn: (arr: State[K]) => State[K]) {
   setState((s) => ({ [key]: fn(s[key]) }) as Partial<State>)
 }
+
+/* ---- session: the in-memory half. The real session is the httpOnly cookie held by the API. ---- */
+const copy = <T,>(v: T): T => structuredClone(v)
+
+/** Load the workspace after a successful sign-in. Mock data now; one API call later. */
+export function hydrateWorkspace(user: User) {
+  setState((s) => ({
+    ...blank(s.settings.theme), user,
+    deals: copy(seed.deals), contacts: copy(seed.contacts), companies: copy(seed.companies), reviews: copy(seed.reviews), followups: copy(seed.followups),
+    threads: copy(seed.threads), templates: copy(seed.templates), facts: copy(seed.facts), mailboxes: copy(seed.mailboxes), members: copy(seed.members), audit: copy(seed.audit),
+    events: copy(seed.events),
+  }))
+}
+/** Sign-out and 401: drop every private record from memory. Only the theme survives. */
+export function clearWorkspace() { setState((s) => blank(s.settings.theme)) }
+export const hasSession = () => getState().user !== null

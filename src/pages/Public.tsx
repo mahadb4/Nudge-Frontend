@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Brand, Icon } from '../components/Icons'
+import { api } from '../api'
+import { hydrateWorkspace } from '../store'
 import { Conf, RT_VAR, ST_VAR, useTitle } from '../components/ui'
 import { REPLY_TYPES, STAGES } from '../data/seed'
 
@@ -17,7 +19,7 @@ export function Landing() {
           <div className="eyebrow-l"><i />For B2B sales teams with more replies than time</div>
           <h1>Every sales reply, handled. Nothing sent without you.</h1>
           <p className="lead">Nudge reads the replies to your outreach, works out what each one means, and prepares the next step: the draft, the follow-up, the deal update. You approve it in one click.</p>
-          <div className="cta"><Link className="btn primary lg" to="/sign-up">Start free</Link><Link className="btn lg" to="/app/home">See the demo workspace</Link></div>
+          <div className="cta"><Link className="btn primary lg" to="/sign-up">Start free</Link><Link className="btn lg" to="/app/home" onClick={() => { const u = api.auth.startDemo(); if (u) hydrateWorkspace(u) }}>See the demo workspace</Link></div>
           <div className="small">Works with Gmail, Outlook and any IMAP mailbox.</div>
         </div>
         <div className="hero-card">

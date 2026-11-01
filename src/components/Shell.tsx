@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate, Link } from 'react-router-dom'
 import { Icon, Brand } from './Icons'
-import { Avatar, Field, Kbd, Modal, Pop, Toasts, emailOk } from './ui'
+import { Avatar, Field, Kbd, Modal, Pop, Toasts } from './ui'
+import { LIMITS, clean, cleanMulti, emailErr, normEmail, textErr } from '../data/validate'
 import { money as _m } from '../data/seed'
-import { getState, setState, setTheme, useStore, sendNewEmail, toast } from '../store'
+import { getState, setState, setTheme, useStore, sendNewEmail, toast, clearWorkspace } from '../store'
+import { api } from '../api'
 import { AgentPanel } from './AgentPanel'
 
 void _m
@@ -99,7 +101,7 @@ export function Shell() {
             <Pop open={me} onClose={() => setMe(false)} style={{ top: 44, right: 0 }}>
               <div style={{ padding: '8px 10px' }}><b>Mahad Baig</b><div className="muted mono" style={{ fontSize: 12 }}>mahad@acme.co</div></div>
               <button className="menu-item" onClick={() => { setMe(false); nav('/app/settings/profile') }}><Icon n="settings" s={15} />Settings</button>
-              <button className="menu-item danger" onClick={() => { setMe(false); nav('/sign-in') }}><Icon n="logout" s={15} />Sign out</button>
+              <button className="menu-item danger" onClick={() => { setMe(false); void api.auth.logout().finally(() => { clearWorkspace(); nav('/sign-in', { replace: true }) }) }}><Icon n="logout" s={15} />Sign out</button>
             </Pop>
           </div>
         </div>
@@ -157,7 +159,7 @@ function CommandPalette() {
     <div className="scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) close() }}>
       <div className="cmdk" role="dialog" aria-label="Search">
         <div className="in"><Icon n="search" s={19} />
-          <input ref={ref} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search people, deals, pages"
+          <input ref={ref} value={q} onChange={(e) => setQ(e.target.value)} maxLength={LIMITS.search} placeholder="Search people, deals, pages"
             onKeyDown={(e) => {
               if (e.key === 'Escape') close()
               if (e.key === 'ArrowDown') { e.preventDefault(); setHl((h) => Math.min(items.length - 1, h + 1)) }
@@ -184,16 +186,21 @@ function NewEmail() {
   const [from, setFrom] = useState(mailboxes[0].email)
   const [tried, setTried] = useState(false)
   const close = () => setState(() => ({ newEmailOpen: false }))
-  const errs = { to: !emailOk(to) ? 'Enter a valid email address' : getState().contacts.find((c) => c.email === to)?.status === 'Opted out' ? 'This person opted out. Nudge will not send.' : '', subject: !subject.trim() ? 'Add a subject' : '', body: body.trim().length < 5 ? 'Write a message' : '' }
+  const hit = getState().contacts.find((c) => normEmail(c.email) === normEmail(to))
+  const errs = {
+    to: emailErr(to) || (hit && hit.status !== 'Active' ? (hit.status === 'Opted out' ? 'This person opted out. Nudge will not send.' : 'This contact is suspended. Nudge will not send.') : ''),
+    subject: textErr(subject, 'subject', 2, LIMITS.subject) || (/[\r\n]/.test(subject) ? 'The subject must be one line.' : ''),
+    body: textErr(body, 'message', 5, LIMITS.body),
+  }
   const bad = Object.values(errs).some(Boolean)
   return (
     <Modal title="New email" onClose={close} wide
       foot={<><span className="note">Goes to Review first. Nothing sends without you.</span><div className="row"><button className="btn" onClick={close}>Cancel</button>
-        <button className="btn primary" onClick={() => { setTried(true); if (bad) return; sendNewEmail(to, subject); close() }}>Send for approval</button></div></>}>
+        <button className="btn primary" onClick={() => { setTried(true); if (bad) return; sendNewEmail(normEmail(to), clean(subject)); close() }}>Send for approval</button></div></>}>
       <Field label="From"><select className="select" value={from} onChange={(e) => setFrom(e.target.value)}>{mailboxes.filter((m) => m.status === 'ok').map((m) => <option key={m.id}>{m.email}</option>)}</select></Field>
-      <Field label="To" error={tried ? errs.to : ''}><input className={'input' + (tried && errs.to ? ' invalid' : '')} value={to} onChange={(e) => setTo(e.target.value)} placeholder="name@company.com" /></Field>
-      <Field label="Subject" error={tried ? errs.subject : ''}><input className={'input' + (tried && errs.subject ? ' invalid' : '')} value={subject} onChange={(e) => setSubject(e.target.value)} /></Field>
-      <Field label="Message" error={tried ? errs.body : ''}><textarea className={'textarea' + (tried && errs.body ? ' invalid' : '')} value={body} onChange={(e) => setBody(e.target.value)} rows={6} /></Field>
+      <Field label="To" error={tried ? errs.to : ''}><input className={'input' + (tried && errs.to ? ' invalid' : '')} type="email" inputMode="email" autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={LIMITS.email} value={to} onChange={(e) => setTo(e.target.value)} onBlur={() => setTo((v) => normEmail(v))} placeholder="name@company.com" /></Field>
+      <Field label="Subject" error={tried ? errs.subject : ''}><input className={'input' + (tried && errs.subject ? ' invalid' : '')} maxLength={LIMITS.subject + 20} value={subject} onChange={(e) => setSubject(e.target.value)} /></Field>
+      <Field label="Message" error={tried ? errs.body : ''}><textarea className={'textarea' + (tried && errs.body ? ' invalid' : '')} maxLength={LIMITS.body + 50} value={body} onChange={(e) => setBody(cleanMulti(e.target.value + '.').slice(0, -1))} rows={6} /></Field>
     </Modal>
   )
 }

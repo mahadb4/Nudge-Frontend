@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { NavLink, Navigate, useParams } from 'react-router-dom'
 import { Icon, GoogleG, MsLogo } from '../components/Icons'
 import { Avatar, Field, Modal, ReplyMark, Toggle, downloadCSV, emailOk, pwScore, useTitle } from '../components/ui'
+import { LIMITS, clean, emailErr, nameErr, normEmail, passwordErr, personErr, phoneErr, textErr } from '../data/validate'
+import { api, apiMessage } from '../api'
+import { useSubmit } from '../components/guards'
 import { logAudit, nid, patch, setSettings, setTheme, toast, useStore } from '../store'
 import { REPLY_TYPES, type Fact, type Member } from '../data/seed'
 
@@ -42,13 +45,13 @@ function Profile() {
   const theme = useStore((s) => s.settings.theme)
   const [name, setName] = useState('Mahad Baig'); const [phone, setPhone] = useState('300 5550142'); const [tz, setTz] = useState('Asia/Karachi')
   const [tried, setTried] = useState(false)
-  const e = { name: name.trim().length < 2 ? 'Enter your name' : '', phone: phone && !/^[\d\s-]{7,15}$/.test(phone) ? 'Enter a valid phone number' : '' }
+  const e = { name: personErr(name), phone: phoneErr(phone) }
   return (<>
     <div className="card set-card"><Head t="Profile" d="Your name appears on drafts you approve." />
       <div className="form-stack">
-        <Field label="Full name" error={tried ? e.name : ''}><input className={'input' + (tried && e.name ? ' invalid' : '')} value={name} onChange={(x) => setName(x.target.value)} /></Field>
+        <Field label="Full name" error={tried ? e.name : ''}><input className={'input' + (tried && e.name ? ' invalid' : '')} maxLength={LIMITS.name} autoComplete="name" value={name} onChange={(x) => setName(x.target.value)} /></Field>
         <Field label="Email" hint="Email is your sign-in. Contact support to change it."><input className="input readonly" value="mahad@acme.co" readOnly /></Field>
-        <Field label="Phone" opt error={tried ? e.phone : ''}><div className="phone-row"><select className="select" defaultValue="+92"><option>+92</option><option>+1</option><option>+44</option><option>+971</option></select><input className={'input' + (tried && e.phone ? ' invalid' : '')} value={phone} onChange={(x) => setPhone(x.target.value)} /></div></Field>
+        <Field label="Phone" opt error={tried ? e.phone : ''}><div className="phone-row"><select className="select" defaultValue="+92"><option>+92</option><option>+1</option><option>+44</option><option>+971</option></select><input className={'input' + (tried && e.phone ? ' invalid' : '')} type="tel" inputMode="tel" autoComplete="tel-national" maxLength={LIMITS.phone} value={phone} onChange={(x) => setPhone(x.target.value)} /></div></Field>
         <Field label="Time zone"><select className="select" value={tz} onChange={(x) => setTz(x.target.value)}>{['Asia/Karachi', 'Europe/London', 'America/New_York', 'Asia/Dubai'].map((z) => <option key={z}>{z}</option>)}</select></Field>
       </div>
       <div className="actions-end"><button className="btn primary" onClick={() => { setTried(true); if (e.name || e.phone) return; setSettings({ tz }); toast('Profile saved') }}>Save changes</button></div></div>
@@ -60,19 +63,20 @@ function Profile() {
 
 function Security() {
   const twoFA = useStore((s) => s.settings.twoFA)
+  const { busy, run } = useSubmit()
   const [cur, setCur] = useState(''); const [pw, setPw] = useState(''); const [pw2, setPw2] = useState(''); const [show, setShow] = useState(false); const [tried, setTried] = useState(false)
   const [sessions, setSessions] = useState([{ id: 1, d: 'Chrome on Windows', m: 'Karachi, PK · This device · Active now', me: true }, { id: 2, d: 'Safari on iPhone', m: 'Karachi, PK · 2 hours ago', me: false }, { id: 3, d: 'Chrome on macOS', m: 'Lahore, PK · 6 days ago', me: false }])
   const sc = pwScore(pw)
-  const e = { cur: !cur ? 'Enter your current password' : '', pw: pw.length < 8 ? 'Use at least 8 characters' : sc < 3 ? 'Add a number and a capital letter' : '', pw2: pw2 !== pw ? 'Passwords do not match' : '' }
+  const e = { cur: !cur ? 'Enter your current password.' : cur.length > LIMITS.password ? 'That password is too long.' : '', pw: passwordErr(pw, { email: 'mahad@acme.co', name: 'Mahad Baig' }) || (pw === cur ? 'Choose a password you have not used here.' : ''), pw2: !pw2 ? 'Confirm your new password.' : pw2 !== pw ? 'Passwords do not match.' : '' }
   return (<>
     <div className="card set-card"><Head t="Password" d="Use a long password you do not use anywhere else." />
       <div className="form-stack" style={{ maxWidth: 440 }}>
-        <Field label="Current password" error={tried ? e.cur : ''}><input className="input" type={show ? 'text' : 'password'} value={cur} onChange={(x) => setCur(x.target.value)} /></Field>
-        <Field label="New password" error={tried ? e.pw : ''}><input className="input" type={show ? 'text' : 'password'} value={pw} onChange={(x) => setPw(x.target.value)} /><div className={'strength s' + sc}><i /><i /><i /><i /></div></Field>
-        <Field label="Confirm new password" error={tried ? e.pw2 : ''}><input className="input" type={show ? 'text' : 'password'} value={pw2} onChange={(x) => setPw2(x.target.value)} /></Field>
+        <Field label="Current password" error={tried ? e.cur : ''}><input className={'input' + (tried && e.cur ? ' invalid' : '')} type={show ? 'text' : 'password'} autoComplete="current-password" maxLength={LIMITS.password} value={cur} onChange={(x) => setCur(x.target.value)} /></Field>
+        <Field label="New password" error={tried ? e.pw : ''}><input className={'input' + (tried && e.pw ? ' invalid' : '')} type={show ? 'text' : 'password'} autoComplete="new-password" maxLength={LIMITS.password} value={pw} onChange={(x) => setPw(x.target.value)} /><div className={'strength s' + sc}><i /><i /><i /><i /></div></Field>
+        <Field label="Confirm new password" error={tried ? e.pw2 : ''}><input className={'input' + (tried && e.pw2 ? ' invalid' : '')} type={show ? 'text' : 'password'} autoComplete="new-password" maxLength={LIMITS.password} value={pw2} onChange={(x) => setPw2(x.target.value)} /></Field>
         <label className="row" style={{ fontSize: 13.5 }}><input type="checkbox" className="check" checked={show} onChange={(x) => setShow(x.target.checked)} />Show passwords</label>
       </div>
-      <div className="actions-end"><button className="btn primary" onClick={() => { setTried(true); if (e.cur || e.pw || e.pw2) return; setCur(''); setPw(''); setPw2(''); setTried(false); logAudit('Changed password', 'Account'); toast('Password updated') }}>Update password</button></div></div>
+      <div className="actions-end"><button className="btn primary" disabled={busy} onClick={() => { setTried(true); if (e.cur || e.pw || e.pw2) return; void run(async () => { try { await api.auth.changePassword({ current: cur, password: pw }); setCur(''); setPw(''); setPw2(''); setTried(false); logAudit('Changed password', 'Account'); toast('Password updated') } catch (err) { toast(apiMessage(err)) } }) }}>{busy ? 'Updating…' : 'Update password'}</button></div></div>
     <div className="card set-card"><Head t="Two-step sign-in" d="Ask for a 6-digit code from your authenticator app at sign-in." />
       <div className="set-row" style={{ borderTop: 0, paddingBottom: 0 }}><div className="grow"><b>Authenticator app <span className={'tag ' + (twoFA ? 'green' : 'grey')}>{twoFA ? 'On' : 'Off'}</span></b></div><Toggle on={twoFA} label="Two-step sign-in" onChange={(v) => { setSettings({ twoFA: v }); toast(v ? 'Two-step sign-in is on' : 'Two-step sign-in is off') }} /></div></div>
     <div className="card set-card"><Head t="Active sessions" />
@@ -83,13 +87,25 @@ function Security() {
 function Workspace() {
   const st = useStore((s) => s.settings)
   const [name, setName] = useState('Acme Sales'); const [stages, setStages] = useState(st.dealStages); const [nw, setNw] = useState('')
+  const wsErr = nameErr(name, 'workspace name', 2, LIMITS.company)
+  const [stTried, setStTried] = useState(false)
+  const stageErr = (list: string[]) => list.map((x, i) => {
+    const t = clean(x)
+    if (!t) return 'Name this stage.'
+    if (t.length > LIMITS.stage) return `Keep it under ${LIMITS.stage} characters.`
+    if (/[<>]/.test(t)) return 'Remove < and >.'
+    if (list.findIndex((y) => clean(y).toLowerCase() === t.toLowerCase()) !== i) return 'Another stage has this name.'
+    return ''
+  })
+  const sErr = stageErr(stages)
+  const nwErr = !clean(nw) ? '' : stageErr([...stages, nw]).pop() ?? ''
   const mv = (i: number, d: number) => { if (i < 1 || i + d < 1 || i + d > stages.length - 3) return; const a = [...stages]; [a[i], a[i + d]] = [a[i + d], a[i]]; setStages(a) }
   return (<>
     <div className="card set-card"><Head t="Workspace" /><div className="form-stack">
-      <Field label="Workspace name" error={name.trim().length < 2 ? 'Enter a name' : ''}><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></Field>
+      <Field label="Workspace name" error={wsErr}><input className={'input' + (wsErr ? ' invalid' : '')} maxLength={LIMITS.company} value={name} onChange={(e) => setName(e.target.value)} /></Field>
       <Field label="Default currency" hint="Deals keep their own currency. USD and PKR are never added together."><select className="select" defaultValue="USD"><option>USD</option><option>PKR</option></select></Field>
       <Field label="Time zone"><select className="select" value={st.tz} onChange={(e) => setSettings({ tz: e.target.value })}>{['Asia/Karachi', 'Europe/London', 'America/New_York'].map((z) => <option key={z}>{z}</option>)}</select></Field></div>
-      <div className="actions-end"><button className="btn primary" onClick={() => { if (name.trim().length < 2) return; toast('Workspace saved') }}>Save changes</button></div></div>
+      <div className="actions-end"><button className="btn primary" onClick={() => { if (wsErr) return; toast('Workspace saved') }}>Save changes</button></div></div>
     <div className="card set-card"><Head t="Quiet hours" d="Nudge holds approved sends outside these hours." />
       <div className="set-row" style={{ borderTop: 0 }}><div className="grow"><b>Hold sends overnight</b></div><Toggle on={st.quietOn} label="Quiet hours" onChange={(v) => setSettings({ quietOn: v })} /></div>
       {st.quietOn && <div className="time-row"><Field label="From"><select className="select" value={st.quietFrom} onChange={(e) => setSettings({ quietFrom: e.target.value })}>{['6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM', '10:00 PM'].map((t) => <option key={t}>{t}</option>)}</select></Field>
@@ -97,10 +113,10 @@ function Workspace() {
     <div className="card set-card"><Head t="Deal stages" d="Won and Lost are fixed. Rename or reorder the rest." />
       <div className="stage-list">{stages.map((s, i) => { const fixed = i >= stages.length - 2; return (
         <div className="stage-li" key={i}><span className="n">{i + 1}</span><i className="dot round" style={{ background: `var(--st-${['new', 'contacted', 'meeting', 'proposal', 'negotiation', 'won', 'lost'][Math.min(i, 6)]})` }} />
-          {fixed ? <span>{s}<span className="w"> · fixed</span></span> : <input className="input" style={{ height: 34 }} value={s} onChange={(e) => setStages(stages.map((x, j) => (j === i ? e.target.value : x)))} />}
+          {fixed ? <span>{s}<span className="w"> · fixed</span></span> : <span className="grow"><input className={'input' + (stTried && sErr[i] ? ' invalid' : '')} style={{ height: 34 }} maxLength={LIMITS.stage + 10} aria-label={'Stage ' + (i + 1)} value={s} onChange={(e) => setStages(stages.map((x, j) => (j === i ? e.target.value : x)))} />{stTried && sErr[i] && <span className="err">{sErr[i]}</span>}</span>}
           {!fixed && <span className="row" style={{ gap: 2 }}><button className="icon-btn" aria-label="Move up" onClick={() => mv(i, -1)}><Icon n="chevD" s={15} style={{ transform: 'rotate(180deg)' }} /></button><button className="icon-btn" aria-label="Move down" onClick={() => mv(i, 1)}><Icon n="chevD" s={15} /></button></span>}</div>)})}</div>
-      <div className="row" style={{ marginTop: 14 }}><input className="input" style={{ maxWidth: 280, height: 36 }} placeholder="New stage name" value={nw} onChange={(e) => setNw(e.target.value)} /><button className="btn" onClick={() => { if (!nw.trim()) return; const a = [...stages]; a.splice(a.length - 2, 0, nw.trim()); setStages(a); setNw('') }}>Add stage</button></div>
-      <div className="actions-end"><button className="btn primary" onClick={() => { setSettings({ dealStages: stages }); toast('Stages saved') }}>Save stages</button></div></div>
+      <div className="row" style={{ marginTop: 14 }}><input className={'input' + (nwErr ? ' invalid' : '')} style={{ maxWidth: 280, height: 36 }} maxLength={LIMITS.stage + 10} placeholder="New stage name" value={nw} onChange={(e) => setNw(e.target.value)} /><button className="btn" disabled={!clean(nw) || !!nwErr || stages.length >= 12} onClick={() => { const a = [...stages]; a.splice(a.length - 2, 0, clean(nw)); setStages(a); setNw('') }}>Add stage</button>{nwErr && <span className="err">{nwErr}</span>}{stages.length >= 12 && <span className="hint">Twelve stages is the limit.</span>}</div>
+      <div className="actions-end"><button className="btn primary" onClick={() => { setStTried(true); if (sErr.some(Boolean)) { toast('Fix the stage names first'); return } setSettings({ dealStages: stages.map(clean) }); toast('Stages saved') }}>Save stages</button></div></div>
   </>)
 }
 
@@ -125,10 +141,10 @@ function Team() {
 function Invite({ onClose }: { onClose: () => void }) {
   const members = useStore((s) => s.members)
   const [email, setEmail] = useState(''); const [role, setRole] = useState<'Admin' | 'Member'>('Member'); const [tried, setTried] = useState(false)
-  const err = !emailOk(email) ? 'Enter a valid email' : members.some((m) => m.email === email) ? 'Already on the team' : ''
+  const err = emailErr(email) || (members.some((m) => normEmail(m.email) === normEmail(email)) ? 'Already on the team.' : '')
   return (<Modal title="Invite teammate" onClose={onClose} foot={<><span /><div className="row"><button className="btn" onClick={onClose}>Cancel</button>
-    <button className="btn primary" onClick={() => { setTried(true); if (err) return; const nm = email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()); patch('members', (a) => [...a, { id: nid('u'), name: nm, initials: nm.slice(0, 2).toUpperCase(), tint: 't-lav', email, role, team: 'Sales', last: 'Invited just now', status: 'Invited' }]); toast('Invite sent to ' + email); onClose() }}>Send invite</button></div></>}>
-    <Field label="Email" error={tried ? err : ''}><input className="input" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus /></Field>
+    <button className="btn primary" onClick={() => { setTried(true); if (err) return; const nm = normEmail(email).split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()); patch('members', (a) => [...a, { id: nid('u'), name: nm, initials: nm.slice(0, 2).toUpperCase(), tint: 't-lav', email: normEmail(email), role, team: 'Sales', last: 'Invited just now', status: 'Invited' }]); toast('Invite sent to ' + email); onClose() }}>Send invite</button></div></>}>
+    <Field label="Email" error={tried ? err : ''}><input className={'input' + (tried && err ? ' invalid' : '')} type="email" inputMode="email" autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={LIMITS.email} value={email} onChange={(e) => setEmail(e.target.value)} onBlur={() => setEmail((v) => normEmail(v))} autoFocus /></Field>
     <Field label="Role"><select className="select" value={role} onChange={(e) => setRole(e.target.value as 'Admin')}><option>Member</option><option>Admin</option></select></Field></Modal>)
 }
 
@@ -185,14 +201,18 @@ function Facts() {
 }
 function FactModal({ fact, onClose }: { fact: Fact | null; onClose: () => void }) {
   const [key, setKey] = useState(fact?.key ?? ''); const [val, setVal] = useState(fact?.value ?? ''); const [tried, setTried] = useState(false)
-  const e = { key: key.trim().length < 2 ? 'Give the fact a name' : '', val: val.trim().length < 3 ? 'Write the fact in a full phrase' : '' }
+  const facts = useStore((x) => x.facts)
+  const e = {
+    key: nameErr(key, 'fact name', 2, 60) || (facts.some((f) => f.id !== fact?.id && clean(f.key).toLowerCase() === clean(key).toLowerCase()) ? 'A fact with this name already exists.' : ''),
+    val: textErr(val, 'fact', 5, LIMITS.fact),
+  }
   return (<Modal title={fact ? 'Edit fact' : 'Add fact'} onClose={onClose} foot={<><span className="note">Only state what is true today.</span><div className="row"><button className="btn" onClick={onClose}>Cancel</button>
     <button className="btn primary" onClick={() => { setTried(true); if (e.key || e.val) return
-      if (fact) patch('facts', (a) => a.map((x) => (x.id === fact.id ? { ...x, key: key.trim(), value: val.trim(), when: 'Updated just now', by: 'Mahad Baig' } : x)))
-      else patch('facts', (a) => [...a, { id: nid('fa'), key: key.trim(), value: val.trim(), on: true, by: 'Mahad Baig', when: 'Added just now' }])
+      if (fact) patch('facts', (a) => a.map((x) => (x.id === fact.id ? { ...x, key: clean(key), value: clean(val), when: 'Updated just now', by: 'Mahad Baig' } : x)))
+      else patch('facts', (a) => [...a, { id: nid('fa'), key: clean(key), value: clean(val), on: true, by: 'Mahad Baig', when: 'Added just now' }])
       logAudit(fact ? 'Changed approved fact' : 'Added approved fact', key); toast('Fact saved'); onClose() }}>Save</button></div></>}>
-    <Field label="Name" error={tried ? e.key : ''}><input className="input" value={key} onChange={(x) => setKey(x.target.value)} autoFocus /></Field>
-    <Field label="What Nudge may say" error={tried ? e.val : ''}><textarea className="textarea" rows={3} value={val} onChange={(x) => setVal(x.target.value)} /></Field></Modal>)
+    <Field label="Name" error={tried ? e.key : ''}><input className={'input' + (tried && e.key ? ' invalid' : '')} maxLength={70} value={key} onChange={(x) => setKey(x.target.value)} autoFocus /></Field>
+    <Field label="What Nudge may say" error={tried ? e.val : ''}><textarea className={'textarea' + (tried && e.val ? ' invalid' : '')} rows={3} maxLength={LIMITS.fact + 20} value={val} onChange={(x) => setVal(x.target.value)} /><span className="hint">{clean(val).length}/{LIMITS.fact}</span></Field></Modal>)
 }
 
 function Notifications() {

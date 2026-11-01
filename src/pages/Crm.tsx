@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Icon } from '../components/Icons'
-import { Avatar, Field, Modal, ST_VAR, companyName, contactById, downloadCSV, emailOk, useTitle } from '../components/ui'
+import { Avatar, Field, Modal, ST_VAR, companyName, contactById, downloadCSV, useTitle } from '../components/ui'
+import { idOk, CSV_MAX_ROWS, FORMULA_START, LIMITS, clean, csvFileErr, decodeUtf8, domainErr, stripFormulaStart, emailErr, emailOk, nameErr, normEmail, parseCSV, personErr, phoneErr } from '../data/validate'
 import { addCompany, addContact, toast, useStore, nid, setState, logAudit } from '../store'
 import { money, stageLabel } from '../data/seed'
 
@@ -20,7 +21,7 @@ export function Contacts() {
         <div className="row"><button className="btn" onClick={() => setImp(true)}><Icon n="upload" s={15} />Import CSV</button><button className="btn" onClick={() => downloadCSV('contacts.csv', [['Name', 'Email', 'Company', 'Title', 'Status'], ...list.map((c) => [c.name, c.email, companyName(c.companyId), c.title, c.status])])}><Icon n="download" s={15} />Export</button>
           <button className="btn primary" onClick={() => setAdding(true)}><Icon n="plus" s={16} w={2.2} />Add contact</button></div></div>
       <div className="filters">
-        <div className="sbox"><Icon n="search" s={16} /><input className="input" placeholder="Search name, email, company" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+        <div className="sbox"><Icon n="search" s={16} /><input className="input" type="search" maxLength={LIMITS.search} autoComplete="off" spellCheck={false} aria-label="Search contacts" placeholder="Search name, email, company" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <select className="select" value={st} onChange={(e) => setSt(e.target.value)} aria-label="Status"><option value="all">All statuses</option><option>Active</option><option>Opted out</option><option>Suspended</option></select>
         <select className="select" value={ow} onChange={(e) => setOw(e.target.value)} aria-label="Owner"><option value="all">All owners</option>{['Mahad Baig', 'Sana Iqbal', 'Zain Ahmed', 'Hira Malik'].map((o) => <option key={o}>{o}</option>)}</select>
         <span className="count">{list.length} shown</span>
@@ -47,18 +48,23 @@ function AddContact({ onClose, companyId = '' }: { onClose: () => void; companyI
   const nav = useNavigate()
   const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [title, setTitle] = useState(''); const [co, setCo] = useState(companyId); const [phone, setPhone] = useState('')
   const [tried, setTried] = useState(false)
-  const e = { name: name.trim().length < 2 ? 'Enter a name' : '', email: !emailOk(email) ? 'Enter a valid email' : contacts.some((c) => c.email.toLowerCase() === email.toLowerCase()) ? 'A contact with this email already exists' : '' }
-  const bad = !!(e.name || e.email)
+  const e = {
+    name: personErr(name),
+    email: emailErr(email) || (contacts.some((c) => normEmail(c.email) === normEmail(email)) ? 'A contact with this email already exists.' : ''),
+    title: clean(title).length > LIMITS.title ? `Keep the title under ${LIMITS.title} characters.` : '',
+    phone: phoneErr(phone),
+  }
+  const bad = !!(e.name || e.email || e.title || e.phone)
   return (
     <Modal title="Add contact" onClose={onClose} wide foot={<><span /><div className="row"><button className="btn" onClick={onClose}>Cancel</button>
-      <button className="btn primary" onClick={() => { setTried(true); if (bad) return; const k = addContact({ name: name.trim(), email, title, companyId: co || null, phone, location: '', owner: 'Mahad Baig' }); toast(k.name + ' added'); onClose(); nav('/app/contacts/' + k.id) }}>Add contact</button></div></>}>
+      <button className="btn primary" onClick={() => { setTried(true); if (bad) return; const k = addContact({ name: clean(name), email: normEmail(email), title: clean(title), companyId: co || null, phone: phone.trim(), location: '', owner: 'Mahad Baig' }); toast(k.name + ' added'); onClose(); nav('/app/contacts/' + k.id) }}>Add contact</button></div></>}>
       <div className="grid-2">
-        <Field label="Full name" error={tried ? e.name : ''}><input className={'input' + (tried && e.name ? ' invalid' : '')} value={name} onChange={(x) => setName(x.target.value)} autoFocus /></Field>
-        <Field label="Email" error={tried ? e.email : ''}><input className={'input' + (tried && e.email ? ' invalid' : '')} value={email} onChange={(x) => setEmail(x.target.value)} /></Field>
+        <Field label="Full name" error={tried ? e.name : ''}><input className={'input' + (tried && e.name ? ' invalid' : '')} maxLength={LIMITS.name} value={name} onChange={(x) => setName(x.target.value)} autoFocus /></Field>
+        <Field label="Email" error={tried ? e.email : ''}><input className={'input' + (tried && e.email ? ' invalid' : '')} type="email" inputMode="email" autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={LIMITS.email} value={email} onChange={(x) => setEmail(x.target.value)} onBlur={() => setEmail((v) => normEmail(v))} /></Field>
       </div>
       <div className="grid-2">
-        <Field label="Title" opt><input className="input" value={title} onChange={(x) => setTitle(x.target.value)} /></Field>
-        <Field label="Phone" opt><input className="input" value={phone} onChange={(x) => setPhone(x.target.value)} /></Field>
+        <Field label="Title" opt error={tried ? e.title : ''}><input className={'input' + (tried && e.title ? ' invalid' : '')} maxLength={LIMITS.title + 20} value={title} onChange={(x) => setTitle(x.target.value)} /></Field>
+        <Field label="Phone" opt error={tried ? e.phone : ''}><input className={'input' + (tried && e.phone ? ' invalid' : '')} type="tel" inputMode="tel" maxLength={LIMITS.phone} value={phone} onChange={(x) => setPhone(x.target.value)} /></Field>
       </div>
       <Field label="Company" opt><select className="select" value={co} onChange={(x) => setCo(x.target.value)}><option value="">None</option>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
     </Modal>
@@ -66,33 +72,54 @@ function AddContact({ onClose, companyId = '' }: { onClose: () => void; companyI
 }
 
 function ImportCSV({ onClose }: { onClose: () => void }) {
+  const existing = useStore((x) => x.contacts)
   const [rows, setRows] = useState<string[][] | null>(null)
   const [over, setOver] = useState(false)
   const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
   const input = useRef<HTMLInputElement>(null)
+  /* A dropped or chosen file is untrusted: name, type and size are hints, so the bytes are decoded and checked again. */
   const read = (f: File) => {
-    if (!/\.csv$/i.test(f.name)) { setErr('Choose a .csv file'); return }
-    f.text().then((t) => {
-      const r = t.split(/\r?\n/).filter(Boolean).map((l) => l.split(',').map((x) => x.replace(/^"|"$/g, '').trim()))
-      if (r.length < 2) { setErr('The file has no rows'); return }
+    if (busy) return
+    const bad = csvFileErr(f)
+    if (bad) { setErr(bad); return }
+    setBusy(true)
+    f.arrayBuffer().then((buf) => {
+      let text: string
+      try { text = decodeUtf8(buf) } catch { setErr('The file must be UTF-8 text. Save it as "CSV UTF-8" and try again.'); return }
+      if (text.includes('\u0000')) { setErr('That file is not a text CSV.'); return }
+      const r = parseCSV(text, CSV_MAX_ROWS + 1).map((row) => row.map((c) => clean(c)))
+      if (r.length < 2) { setErr('The file needs a header row and at least one contact.'); return }
+      const head = r[0].map((x) => x.toLowerCase())
+      if (head[0] !== 'name' || head[1] !== 'email') { setErr('The first two columns must be Name and Email. Download the template to see the format.'); return }
+      if (r.length - 1 > CSV_MAX_ROWS) { setErr(`Import up to ${CSV_MAX_ROWS} contacts at a time.`); return }
       setErr(''); setRows(r)
-    })
+    }).catch(() => setErr('That file could not be read.')).finally(() => setBusy(false))
   }
   const body = rows?.slice(1) ?? []
-  const good = body.filter((r) => emailOk(r[1] ?? ''))
+  const seen = new Set(existing.map((c) => normEmail(c.email)))
+  const verdict = body.map((r): string => {
+    if (FORMULA_START.test(r[0] ?? '')) return 'Unsafe text'
+    if (personErr(r[0] ?? '')) return 'Bad name'
+    if (!emailOk(r[1] ?? '')) return 'Bad email'
+    if (clean(r[2] ?? '').length > LIMITS.title) return 'Title too long'
+    const k = normEmail(r[1]); if (seen.has(k)) return 'Duplicate'
+    seen.add(k); return 'OK'
+  })
+  const good = body.filter((_, i) => verdict[i] === 'OK')
   return (
     <Modal title="Import contacts" onClose={onClose} wide foot={<><span className="note">{rows ? `${good.length} valid, ${body.length - good.length} skipped` : 'Columns: Name, Email, Title'}</span><div className="row"><button className="btn" onClick={onClose}>Cancel</button>
-      <button className="btn primary" disabled={!rows || good.length === 0} onClick={() => { good.forEach((r) => addContact({ name: r[0], email: r[1], title: r[2] ?? '', companyId: null, phone: '', location: '', owner: 'Mahad Baig' })); toast(good.length + ' contacts imported'); onClose() }}>Import {good.length || ''}</button></div></>}>
+      <button className="btn primary" disabled={!rows || good.length === 0} onClick={() => { good.forEach((r) => addContact({ name: clean(r[0]), email: normEmail(r[1]), title: stripFormulaStart(r[2] ?? '').slice(0, LIMITS.title), companyId: null, phone: '', location: '', owner: 'Mahad Baig' })); toast(good.length + ' contacts imported'); onClose() }}>Import {good.length || ''}</button></div></>}>
       {!rows ? <>
         <div className={'drop' + (over ? ' over' : '')} onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files[0]; if (f) read(f) }}>
           <Icon n="upload" s={26} /><p style={{ margin: '10px 0 14px' }}>Drop a CSV here</p><button className="btn" onClick={() => input.current?.click()}>Choose file</button>
-          <input ref={input} type="file" accept=".csv" hidden onChange={(e) => e.target.files?.[0] && read(e.target.files[0])} />
+          <input ref={input} type="file" accept=".csv,text/csv" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) read(f); e.target.value = '' }} />
         </div>
         {err && <span className="err">{err}</span>}
         <button className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => downloadCSV('contacts-template.csv', [['Name', 'Email', 'Title'], ['Ada Lovelace', 'ada@example.com', 'CTO']])}><Icon n="download" s={14} />Download a template</button>
       </> : (
         <table className="tbl"><thead><tr><th>Name</th><th>Email</th><th>Title</th><th /></tr></thead><tbody>
-          {body.slice(0, 8).map((r, i) => <tr key={i}><td>{r[0]}</td><td className="mono">{r[1]}</td><td>{r[2]}</td><td>{emailOk(r[1] ?? '') ? <span className="tag green">OK</span> : <span className="tag red">Bad email</span>}</td></tr>)}
+          {body.slice(0, 8).map((r, i) => <tr key={i}><td>{r[0]}</td><td className="mono">{r[1]}</td><td>{r[2]}</td><td>{verdict[i] === 'OK' ? <span className="tag green">OK</span> : <span className="tag red">{verdict[i]}</span>}</td></tr>)}
         </tbody></table>
       )}
     </Modal>
@@ -101,7 +128,7 @@ function ImportCSV({ onClose }: { onClose: () => void }) {
 
 export function ContactDetail() {
   const { id } = useParams()
-  const c = useStore((s) => s.contacts.find((x) => x.id === id))
+  const c = useStore((s) => (idOk(id) ? s.contacts.find((x) => x.id === id) : undefined))
   const allDeals = useStore((s) => s.deals); const allThreads = useStore((s) => s.threads)
   const deals = allDeals.filter((d) => d.contactId === id)
   const threads = allThreads.filter((t) => t.contactId === id)
@@ -151,7 +178,7 @@ export function Companies() {
     <div className="page">
       <div className="page-head"><div><h1 className="h1">Companies</h1><p className="page-sub">{companies.length} companies. Open deal totals count USD only.</p></div>
         <button className="btn primary" onClick={() => setAdding(true)}><Icon n="plus" s={16} w={2.2} />Add company</button></div>
-      <div className="filters"><div className="sbox"><Icon n="search" s={16} /><input className="input" placeholder="Search companies" value={q} onChange={(e) => setQ(e.target.value)} /></div><span className="count">{list.length} shown</span></div>
+      <div className="filters"><div className="sbox"><Icon n="search" s={16} /><input className="input" type="search" maxLength={LIMITS.search} autoComplete="off" spellCheck={false} aria-label="Search companies" placeholder="Search companies" value={q} onChange={(e) => setQ(e.target.value)} /></div><span className="count">{list.length} shown</span></div>
       <div className="card tbl-scroll"><table className="tbl">
         <thead><tr><th>Company</th><th>Industry</th><th>Location</th><th className="r">People</th><th className="r">Open deals</th><th className="r">Open value</th></tr></thead>
         <tbody>{list.map((c) => {
@@ -168,20 +195,25 @@ export function Companies() {
 function AddCompany({ onClose }: { onClose: () => void }) {
   const nav = useNavigate()
   const [name, setName] = useState(''); const [domain, setDomain] = useState(''); const [industry, setIndustry] = useState(''); const [tried, setTried] = useState(false)
-  const e = { name: name.trim().length < 2 ? 'Enter a company name' : '', domain: domain && !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(domain) ? 'Use a domain like acme.com' : '' }
+  const all = useStore((x) => x.companies)
+  const e = {
+    name: nameErr(name, 'company name', 2, LIMITS.company) || (all.some((c) => clean(c.name).toLowerCase() === clean(name).toLowerCase()) ? 'A company with this name already exists.' : ''),
+    domain: domainErr(domain),
+    industry: clean(industry).length > LIMITS.title ? `Keep the industry under ${LIMITS.title} characters.` : '',
+  }
   return (
     <Modal title="Add company" onClose={onClose} foot={<><span /><div className="row"><button className="btn" onClick={onClose}>Cancel</button>
-      <button className="btn primary" onClick={() => { setTried(true); if (e.name || e.domain) return; const k = addCompany({ name: name.trim(), domain, industry: industry || 'Other', size: '–', location: '–', owner: 'Mahad Baig', website: domain }); toast(k.name + ' added'); onClose(); nav('/app/companies/' + k.id) }}>Add company</button></div></>}>
-      <Field label="Company name" error={tried ? e.name : ''}><input className={'input' + (tried && e.name ? ' invalid' : '')} value={name} onChange={(x) => setName(x.target.value)} autoFocus /></Field>
-      <Field label="Domain" opt error={tried ? e.domain : ''}><input className="input" value={domain} onChange={(x) => setDomain(x.target.value)} placeholder="acme.com" /></Field>
-      <Field label="Industry" opt><input className="input" value={industry} onChange={(x) => setIndustry(x.target.value)} /></Field>
+      <button className="btn primary" onClick={() => { setTried(true); if (e.name || e.domain || e.industry) return; const dm = domain.trim().toLowerCase(); const k = addCompany({ name: clean(name), domain: dm, industry: clean(industry) || 'Other', size: '–', location: '–', owner: 'Mahad Baig', website: dm }); toast(k.name + ' added'); onClose(); nav('/app/companies/' + k.id) }}>Add company</button></div></>}>
+      <Field label="Company name" error={tried ? e.name : ''}><input className={'input' + (tried && e.name ? ' invalid' : '')} maxLength={LIMITS.company} value={name} onChange={(x) => setName(x.target.value)} autoFocus /></Field>
+      <Field label="Domain" opt error={tried ? e.domain : ''}><input className={'input' + (tried && e.domain ? ' invalid' : '')} maxLength={LIMITS.domain} value={domain} onChange={(x) => setDomain(x.target.value)} placeholder="acme.com" /></Field>
+      <Field label="Industry" opt error={tried ? e.industry : ''}><input className={'input' + (tried && e.industry ? ' invalid' : '')} maxLength={LIMITS.title + 20} value={industry} onChange={(x) => setIndustry(x.target.value)} /></Field>
     </Modal>
   )
 }
 
 export function CompanyDetail() {
   const { id } = useParams()
-  const co = useStore((s) => s.companies.find((x) => x.id === id))
+  const co = useStore((s) => (idOk(id) ? s.companies.find((x) => x.id === id) : undefined))
   const allPeople = useStore((s) => s.contacts); const allDeals = useStore((s) => s.deals)
   const people = allPeople.filter((c) => c.companyId === id)
   const deals = allDeals.filter((d) => d.companyId === id)

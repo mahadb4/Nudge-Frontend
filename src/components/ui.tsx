@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Icon } from './Icons'
 import { dismissToast, useStore, getState } from '../store'
 import { rtLabel, type ReplyType, type Stage } from '../data/seed'
+import { csvSafe } from '../data/validate'
 
 export const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase()
 export const firstName = (n: string) => n.split(' ')[0]
@@ -92,27 +93,14 @@ export function Pop({ open, onClose, children, style }: { open: boolean; onClose
   return <div className="popover" ref={ref} style={style}>{children}</div>
 }
 
-export function useLocalState<T>(key: string, init: T) {
-  const [v, setV] = useState<T>(() => { try { const r = sessionStorage.getItem(key); return r ? (JSON.parse(r) as T) : init } catch { return init } })
-  useEffect(() => { try { sessionStorage.setItem(key, JSON.stringify(v)) } catch { /* ignore */ } }, [key, v])
-  return [v, setV] as const
-}
 
-export const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e)
-export function pwScore(p: string) {
-  let s = 0
-  if (p.length >= 8) s++
-  if (/[A-Z]/.test(p) && /[a-z]/.test(p)) s++
-  if (/\d/.test(p)) s++
-  if (/[^A-Za-z0-9]/.test(p) || p.length >= 14) s++
-  return p.length === 0 ? 0 : Math.max(1, s)
-}
+export { emailOk, pwScore } from '../data/validate'
 
 export const companyName = (id: string | null) => (id ? getState().companies.find((c) => c.id === id)?.name ?? '' : '')
 export const contactById = (id: string | null) => getState().contacts.find((c) => c.id === id)
 
 export function downloadCSV(name: string, rows: (string | number)[][]) {
-  const esc = (v: string | number) => '"' + String(v).replace(/"/g, '""') + '"'
+  const esc = (v: string | number) => '"' + (typeof v === 'number' && Number.isFinite(v) ? String(v) : csvSafe(String(v))).replace(/"/g, '""') + '"'
   const blob = new Blob([rows.map((r) => r.map(esc).join(',')).join('\n')], { type: 'text/csv' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob); a.download = name; a.click()

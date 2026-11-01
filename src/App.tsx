@@ -13,6 +13,7 @@ import { Contacts, ContactDetail, Companies, CompanyDetail } from './pages/Crm'
 import { Templates } from './pages/Templates'
 import { Reports } from './pages/Reports'
 import { Settings } from './pages/Settings'
+import { NotFound, RequireAuth, SessionWatcher } from './components/guards'
 
 function ScrollTop() {
   const { pathname } = useLocation()
@@ -24,6 +25,7 @@ export default function App() {
   return (
     <>
       <ScrollTop />
+      <SessionWatcher />
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/sign-in" element={<SignIn />} />
@@ -32,9 +34,9 @@ export default function App() {
         <Route path="/reset" element={<Reset />} />
         <Route path="/new-password" element={<NewPassword />} />
         <Route path="/onboarding" element={<Navigate to="/onboarding/1" replace />} />
-        <Route path="/onboarding/:step" element={<Onboarding />} />
+        <Route path="/onboarding/:step" element={<RequireAuth><Onboarding /></RequireAuth>} />
         <Route path="/foundations" element={<Foundations />} />
-        <Route path="/app" element={<Shell />}>
+        <Route path="/app" element={<RequireAuth><Shell /></RequireAuth>}>
           <Route index element={<Navigate to="home" replace />} />
           <Route path="home" element={<Home />} />
           <Route path="review" element={<Review />} />
@@ -53,7 +55,7 @@ export default function App() {
           <Route path="settings" element={<Navigate to="profile" replace />} />
           <Route path="settings/:tab" element={<Settings />} />
         </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </>
   )

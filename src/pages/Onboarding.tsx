@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Brand, GoogleG, Icon, MsLogo } from '../components/Icons'
 import { Field, Toggle, useTitle } from '../components/ui'
+import { LIMITS, clean, nameErr, textErr } from '../data/validate'
 import { patch, setSettings, toast, useStore, nid } from '../store'
 
 const STEPS = [['Connect your mailbox', '1 min'], ['Teach Nudge your facts', '2 min'], ['Choose how careful it is', '1 min'], ['Set your hours', '1 min'], ['Review your first reply', '1 min']]
 
 export function Onboarding() {
   const { step = '1' } = useParams()
-  const n = Number(step)
+  const n = /^[1-5]$/.test(step) ? Number(step) : 0
   const nav = useNavigate()
   const st = useStore((s) => s.settings)
   const facts = useStore((s) => s.facts)
@@ -26,8 +27,9 @@ export function Onboarding() {
     nav('/onboarding/' + (n + 1))
   }
   const addFact = () => {
-    if (fk.trim().length < 2 || fv.trim().length < 3) { setErr('Add a name and a full phrase for the fact.'); return }
-    patch('facts', (a) => [...a, { id: nid('fa'), key: fk.trim(), value: fv.trim(), on: true, by: 'Mahad Baig', when: 'Added just now' }]); setFk(''); setFv(''); setErr('')
+    const fe = nameErr(fk, 'fact name', 2, 60) || textErr(fv, 'fact', 5, LIMITS.fact) || (facts.some((f) => clean(f.key).toLowerCase() === clean(fk).toLowerCase()) ? 'A fact with this name already exists.' : '')
+    if (fe) { setErr(fe); return }
+    patch('facts', (a) => [...a, { id: nid('fa'), key: clean(fk), value: clean(fv), on: true, by: 'Mahad Baig', when: 'Added just now' }]); setFk(''); setFv(''); setErr('')
   }
 
   return (
@@ -45,7 +47,7 @@ export function Onboarding() {
 
         {n === 2 && <><h1>Teach Nudge your facts</h1><p className="lead">Nudge only states what you approve here. Anything else it leaves for you.</p>
           {facts.map((f) => <div key={f.id} className="row" style={{ padding: '12px 0', borderTop: '1px solid var(--hair)' }}><div className="grow"><b style={{ fontSize: 14 }}>{f.key}</b><div className="muted" style={{ fontSize: 13.5 }}>{f.value}</div></div><Toggle on={f.on} label={f.key} onChange={(v) => patch('facts', (a) => a.map((x) => (x.id === f.id ? { ...x, on: v } : x)))} /></div>)}
-          <div className="grid-2" style={{ marginTop: 18 }}><Field><input className="input" placeholder="Fact name" value={fk} onChange={(e) => setFk(e.target.value)} /></Field><Field><input className="input" placeholder="What Nudge may say" value={fv} onChange={(e) => setFv(e.target.value)} /></Field></div>
+          <div className="grid-2" style={{ marginTop: 18 }}><Field><input className="input" maxLength={70} placeholder="Fact name" value={fk} onChange={(e) => setFk(e.target.value)} /></Field><Field><input className="input" maxLength={LIMITS.fact + 20} placeholder="What Nudge may say" value={fv} onChange={(e) => setFv(e.target.value)} /></Field></div>
           <button className="btn sm" style={{ marginTop: 10, alignSelf: 'flex-start' }} onClick={addFact}><Icon n="plus" s={14} />Add fact</button></>}
 
         {n === 3 && <><h1>Choose how careful it is</h1><p className="lead">You can start with every reply waiting for you. Nudge earns more freedom as you approve.</p>

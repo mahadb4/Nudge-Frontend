@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Icon } from '../components/Icons'
 import { Avatar, Field, Modal, ST_VAR, companyName, contactById, useTitle } from '../components/ui'
+import { LIMITS, idOk, amountErr, clean, cleanMulti, dateErr, nameErr } from '../data/validate'
 import { addDeal, getState, moveDeal, toast, updateDeal, useStore, logAudit } from '../store'
 import { STAGES, money, stageLabel, type Currency, type Stage } from '../data/seed'
 
@@ -116,31 +117,31 @@ function AddDeal({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState(''); const [company, setCompany] = useState(''); const [contact, setContact] = useState('')
   const [amount, setAmount] = useState(''); const [currency, setCurrency] = useState<Currency>('USD'); const [stage, setStage] = useState<Stage>('new')
   const [owner, setOwner] = useState('Mahad Baig'); const [close, setClose] = useState(''); const [tried, setTried] = useState(false)
-  const e = { name: name.trim().length < 2 ? 'Give the deal a name' : '', amount: !/^\d+(\.\d+)?$/.test(amount) || Number(amount) <= 0 ? 'Enter an amount greater than 0' : '' }
-  const bad = Object.values(e).some(Boolean)
+  const e = { name: nameErr(name, 'deal name', 2, LIMITS.name), amount: amountErr(amount), close: dateErr(close) }
+  const bad = Object.values(e).some(Boolean) || !s.members.some((m) => m.name === owner)
   const contactsOfCompany = s.contacts.filter((c) => !company || c.companyId === company)
   return (
     <Modal title="Add deal" onClose={onClose} wide
       foot={<><span className="note">Currencies are kept apart.</span><div className="row"><button className="btn" onClick={onClose}>Cancel</button>
         <button className="btn primary" onClick={() => {
           setTried(true); if (bad) return
-          const d = addDeal({ name: name.trim(), companyId: company || null, contactId: contact || null, amount: Number(amount), currency, stage, owner, close: close || '2027-03-31' })
+          const d = addDeal({ name: clean(name), companyId: company || null, contactId: contact || null, amount: Number(amount.replace(/,/g, '')), currency, stage, owner, close: close || '2027-03-31' })
           toast('Deal added: ' + d.name); onClose(); nav('/app/pipeline/' + d.id)
         }}>Add deal</button></div></>}>
-      <Field label="Deal name" error={tried ? e.name : ''}><input className={'input' + (tried && e.name ? ' invalid' : '')} value={name} onChange={(x) => setName(x.target.value)} autoFocus /></Field>
+      <Field label="Deal name" error={tried ? e.name : ''}><input className={'input' + (tried && e.name ? ' invalid' : '')} maxLength={LIMITS.name} value={name} onChange={(x) => setName(x.target.value)} autoFocus /></Field>
       <div className="grid-2">
         <Field label="Company" opt><select className="select" value={company} onChange={(x) => { setCompany(x.target.value); setContact('') }}><option value="">None</option>{s.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
         <Field label="Contact" opt><select className="select" value={contact} onChange={(x) => setContact(x.target.value)}><option value="">None</option>{contactsOfCompany.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
       </div>
       <div className="grid-2">
-        <Field label="Amount" error={tried ? e.amount : ''}><input className={'input' + (tried && e.amount ? ' invalid' : '')} inputMode="decimal" value={amount} onChange={(x) => setAmount(x.target.value.replace(/,/g, ''))} placeholder="0" /></Field>
+        <Field label="Amount" error={tried ? e.amount : ''}><input className={'input' + (tried && e.amount ? ' invalid' : '')} inputMode="decimal" maxLength={16} value={amount} onChange={(x) => setAmount(x.target.value.replace(/,/g, ''))} placeholder="0" /></Field>
         <Field label="Currency"><select className="select" value={currency} onChange={(x) => setCurrency(x.target.value as Currency)}><option>USD</option><option>PKR</option></select></Field>
       </div>
       <div className="grid-2">
         <Field label="Stage"><select className="select" value={stage} onChange={(x) => setStage(x.target.value as Stage)}>{STAGES.slice(0, 5).map((st) => <option key={st.id} value={st.id}>{st.label}</option>)}</select></Field>
         <Field label="Owner"><select className="select" value={owner} onChange={(x) => setOwner(x.target.value)}>{s.members.map((m) => <option key={m.id}>{m.name}</option>)}</select></Field>
       </div>
-      <Field label="Expected close" opt><input className="input" type="date" value={close} onChange={(x) => setClose(x.target.value)} /></Field>
+      <Field label="Expected close" opt error={tried ? e.close : ''}><input className={'input' + (tried && e.close ? ' invalid' : '')} type="date" max="2100-12-31" value={close} onChange={(x) => setClose(x.target.value)} /></Field>
     </Modal>
   )
 }
@@ -148,11 +149,12 @@ function AddDeal({ onClose }: { onClose: () => void }) {
 export function DealDetail() {
   const { id } = useParams()
   const nav = useNavigate()
-  const deal = useStore((s) => s.deals.find((d) => d.id === id))
+  const deal = useStore((s) => (idOk(id) ? s.deals.find((d) => d.id === id) : undefined))
   const allThreads = useStore((s) => s.threads)
   const threads = allThreads.filter((t) => t.dealId === id)
   const [edit, setEdit] = useState(false)
-  const [note, setNote] = useState('')
+  const [note, setNote] = useState<string | null>(null)
+  const noteErr = note !== null && cleanMulti(note).length > LIMITS.note ? `Keep the note under ${LIMITS.note} characters.` : ''
   const [lost, setLost] = useState(false)
   useTitle(deal?.name ?? 'Deal')
   if (!deal) return <div className="page"><Link className="back-link" to="/app/pipeline"><Icon n="arrowL" s={15} />Pipeline</Link><div className="empty">Deal not found.</div></div>
@@ -196,8 +198,8 @@ export function DealDetail() {
             <div className="kv"><span>Reply waiting</span><span>{deal.waiting ? <Link className="link" to="/app/review">Yes, in Review</Link> : 'No'}</span></div>
           </div>
           <div className="card-title" style={{ marginTop: 26, marginBottom: 10 }}>Notes</div>
-          <textarea className="textarea" rows={3} value={note || deal.note || ''} onChange={(e) => setNote(e.target.value)} placeholder="Add a note for your team" />
-          <div className="actions-end"><button className="btn sm" onClick={() => { updateDeal(deal.id, { note }); toast('Note saved') }}>Save note</button></div>
+          <textarea className={'textarea' + (noteErr ? ' invalid' : '')} rows={3} maxLength={LIMITS.note + 50} value={note ?? deal.note ?? ''} onChange={(e) => setNote(e.target.value)} placeholder="Add a note for your team" />{noteErr && <span className="err">{noteErr}</span>}
+          <div className="actions-end"><button className="btn sm" disabled={note === null || !!noteErr} onClick={() => { updateDeal(deal.id, { note: cleanMulti(note ?? '') }); setNote(null); toast('Note saved') }}>Save note</button></div>
         </div>
         <div className="card pad">
           <div className="card-title">Activity</div>
@@ -219,14 +221,15 @@ export function DealDetail() {
 function EditDeal({ id, onClose }: { id: string; onClose: () => void }) {
   const d = getState().deals.find((x) => x.id === id)!
   const [name, setName] = useState(d.name); const [amount, setAmount] = useState(String(d.amount)); const [close, setClose] = useState(d.close)
-  const bad = name.trim().length < 2 || !/^\d+$/.test(amount) || Number(amount) <= 0
+  const eName = nameErr(name, 'deal name', 2, LIMITS.name); const eAmt = amountErr(amount); const eClose = dateErr(close, { allowPast: true })
+  const bad = !!(eName || eAmt || eClose)
   const [tried, setTried] = useState(false)
   return (
     <Modal title="Edit deal" onClose={onClose} foot={<><span /><div className="row"><button className="btn" onClick={onClose}>Cancel</button>
-      <button className="btn primary" onClick={() => { setTried(true); if (bad) return; updateDeal(id, { name: name.trim(), amount: Number(amount), close }); logAudit('Edited deal', name); toast('Deal updated'); onClose() }}>Save</button></div></>}>
-      <Field label="Deal name" error={tried && name.trim().length < 2 ? 'Give the deal a name' : ''}><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></Field>
-      <Field label={'Amount (' + d.currency + ')'} error={tried && !/^\d+$/.test(amount) ? 'Whole numbers only' : ''}><input className="input" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
-      <Field label="Expected close"><input className="input" type="date" value={close} onChange={(e) => setClose(e.target.value)} /></Field>
+      <button className="btn primary" onClick={() => { setTried(true); if (bad) return; updateDeal(id, { name: clean(name), amount: Number(amount.replace(/,/g, '')), close }); logAudit('Edited deal', clean(name)); toast('Deal updated'); onClose() }}>Save</button></div></>}>
+      <Field label="Deal name" error={tried ? eName : ''}><input className={'input' + (tried && eName ? ' invalid' : '')} maxLength={LIMITS.name} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+      <Field label={'Amount (' + d.currency + ')'} error={tried ? eAmt : ''}><input className={'input' + (tried && eAmt ? ' invalid' : '')} inputMode="decimal" maxLength={16} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+      <Field label="Expected close" error={tried ? eClose : ''}><input className={'input' + (tried && eClose ? ' invalid' : '')} type="date" max="2100-12-31" value={close} onChange={(e) => setClose(e.target.value)} /></Field>
     </Modal>
   )
 }
