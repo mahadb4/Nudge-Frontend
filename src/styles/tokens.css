@@ -1,0 +1,126 @@
+@font-face {
+  font-family: 'Nudge Punct';
+  src: url('@fontsource-variable/geist/files/geist-latin-wght-normal.woff2') format('woff2');
+  font-weight: 100 900;
+  unicode-range: U+002C, U+002E;
+}
+/* Nudge Foundations v0.3 — Geist, Geist Mono, neutral greys.
+   Black is the default action. Colour is spent only where it carries meaning. */
+
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  /* Colour roles (light) */
+  --ground: #fafafa;
+  --surface: #ffffff;
+  --line: #d9d9d9;
+  --ink: #171717;
+  --approve: #1a7f37;
+  --evidence: #ffe27a;
+  --needs: #8f5200;
+  --info: #1f55c6;
+  --destructive: #b42318;
+
+  /* Derived neutrals */
+  --ink-2: #4a4a4a;
+  --ink-3: #6e6e6e;
+  --ink-4: #9a9a9a;
+  --hair: #ececec;
+  --hair-2: #f2f2f2;
+  --shell: #edf0f5;
+  --shell-2: #e2e7ef;
+  --search: #dde3ec;
+  --hover: #f4f4f5;
+  --selected: #dfe4ec;
+  --on-ink: #ffffff;
+  --approve-soft: #e3f2e7;
+  --needs-soft: #fff0d3;
+  --info-soft: #e6edfb;
+  --destructive-soft: #fbe7e4;
+  --destructive-band: #fbe9e7;
+  --scrim: rgba(10, 10, 10, 0.42);
+  --shadow-pop: 0 18px 50px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-card: 0 8px 28px rgba(0, 0, 0, 0.08);
+  --evidence-ink: #171717;
+
+  /* Reply types — a mark, never a pill */
+  --rt-meeting: #2f6bdf;
+  --rt-pricing: #7a5af0;
+  --rt-objection: #d4491b;
+  --rt-defer: #8a8a8a;
+  --rt-referral: #0f9488;
+  --rt-notinterested: #444444;
+  --rt-optout: #c4310b;
+  --rt-ooo: #b4b4b4;
+  --rt-unclear: #d49a06;
+
+  /* Deal stages — one green, getting deeper */
+  --st-new: #cfe6d5;
+  --st-contacted: #9ad2a8;
+  --st-meeting: #57b374;
+  --st-proposal: #1e9a4e;
+  --st-negotiation: #0f6b35;
+  --st-won: #1a7f37;
+  --st-lost: #b42318;
+
+  --font-sans: 'Geist Variable', 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Nudge Punct', 'Geist Mono Variable', 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --ground: #0a0a0a;
+  --surface: #141414;
+  --line: #363636;
+  --ink: #ededed;
+  --approve: #3ecf8e;
+  --evidence: #f2d25c;
+  --needs: #e9b451;
+  --info: #8db0ff;
+  --destructive: #f27561;
+
+  --ink-2: #c4c4c4;
+  --ink-3: #9b9b9b;
+  --ink-4: #6f6f6f;
+  --hair: #262626;
+  --hair-2: #1d1d1d;
+  --shell: #0e0e0f;
+  --shell-2: #1a1a1b;
+  --search: #1d1d1f;
+  --hover: #1c1c1d;
+  --selected: #232325;
+  --on-ink: #0a0a0a;
+  --approve-soft: #12261d;
+  --needs-soft: #2a2110;
+  --info-soft: #14203a;
+  --destructive-soft: #2c1613;
+  --destructive-band: #2a1512;
+  --scrim: rgba(0, 0, 0, 0.62);
+  --shadow-pop: 0 18px 50px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 8px 28px rgba(0, 0, 0, 0.45);
+  --evidence-ink: #14110a;
+
+  --rt-meeting: #6d9bff;
+  --rt-pricing: #a58bff;
+  --rt-objection: #ff7b4d;
+  --rt-defer: #9a9a9a;
+  --rt-referral: #36c2b3;
+  --rt-notinterested: #bdbdbd;
+  --rt-optout: #ff6a45;
+  --rt-ooo: #6f6f6f;
+  --rt-unclear: #e9b451;
+
+  --st-new: #1f3b2a;
+  --st-contacted: #2d6a45;
+  --st-meeting: #3f9a63;
+  --st-proposal: #3ecf8e;
+  --st-negotiation: #7ae7b5;
+  --st-won: #3ecf8e;
+  --st-lost: #f27561;
+}
