@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Brand, GoogleG, Icon, MsLogo } from '../components/Icons'
 import { Field, Toggle, useTitle } from '../components/ui'
 import { LIMITS, clean, nameErr, textErr } from '../data/validate'
-import { patch, setSettings, toast, useStore, nid } from '../store'
+import { getState, patch, setSettings, toast, useStore, nid } from '../store'
 
 const STEPS = [['Connect your mailbox', '1 min'], ['Teach Nudge your facts', '2 min'], ['Choose how careful it is', '1 min'], ['Set your hours', '1 min'], ['Review your first reply', '1 min']]
 
@@ -29,7 +29,7 @@ export function Onboarding() {
   const addFact = () => {
     const fe = nameErr(fk, 'fact name', 2, 60) || textErr(fv, 'fact', 5, LIMITS.fact) || (facts.some((f) => clean(f.key).toLowerCase() === clean(fk).toLowerCase()) ? 'A fact with this name already exists.' : '')
     if (fe) { setErr(fe); return }
-    patch('facts', (a) => [...a, { id: nid('fa'), key: clean(fk), value: clean(fv), on: true, by: 'Mahad Baig', when: 'Added just now' }]); setFk(''); setFv(''); setErr('')
+    patch('facts', (a) => [...a, { id: nid('fa'), key: clean(fk), value: clean(fv), on: true, by: getState().user?.name ?? '', when: 'Added just now' }]); setFk(''); setFv(''); setErr('')
   }
 
   return (

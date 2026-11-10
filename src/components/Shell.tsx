@@ -5,7 +5,8 @@ import { Avatar, Field, Kbd, Modal, Pop, Toasts } from './ui'
 import { LIMITS, clean, cleanMulti, emailErr, normEmail, textErr } from '../data/validate'
 import { money as _m } from '../data/seed'
 import { getState, setState, setTheme, useStore, sendNewEmail, toast, clearWorkspace } from '../store'
-import { api } from '../api'
+import { api, isMock } from '../api'
+import { isDemoWorkspace } from '../data/demoWorkspace'
 import { AgentPanel } from './AgentPanel'
 
 void _m
@@ -29,6 +30,14 @@ const WS = [
   { to: '/app/settings/profile', label: 'Settings', icon: 'settings' },
 ]
 
+/** Screens with no backend yet. Real users see empty lists and this note; the demo workspace sees sample data and a label. */
+function PreviewNote({ sample }: { sample: boolean }) {
+  return (
+    <div className="preview-note-wrap"><div className="preview-note" role="status"><i className="dot round" />
+      {sample ? 'Preview: sample data' : 'This screen is not connected yet. Nothing here is saved.'}</div></div>
+  )
+}
+
 export function Shell() {
   const nav = useNavigate()
   const loc = useLocation()
@@ -50,6 +59,8 @@ export function Shell() {
     return () => window.removeEventListener('keydown', h)
   }, [])
 
+  const ws = s.user?.organization?.name ?? 'Acme Sales'
+  const wired = /^\/app\/(settings\/(profile|security|workspace)|(companies|contacts)(\/[^/]+)?)\/?$/.test(loc.pathname)
   const dark = document.documentElement.getAttribute('data-theme') === 'dark'
   const isReview = loc.pathname.startsWith('/app/review') || loc.pathname.startsWith('/app/inbox')
 
@@ -69,10 +80,10 @@ export function Shell() {
         <Link to="/app/home" style={{ display: 'contents' }}><Brand /></Link>
         <div style={{ position: 'relative' }}>
           <button className="ws-switch" onClick={() => setWsOpen(!wsOpen)} aria-haspopup="menu">
-            <Avatar name="Acme Sales" tint="t-blue" />Acme Sales<Icon n="chevD" s={14} />
+            <Avatar name={ws} tint="t-blue" />{ws}<Icon n="chevD" s={14} />
           </button>
           <Pop open={wsOpen} onClose={() => setWsOpen(false)} style={{ top: 42, left: 0 }}>
-            <button className="menu-item hl"><Avatar name="Acme Sales" tint="t-blue" size="sm" />Acme Sales<Icon n="check" s={15} style={{ marginLeft: 'auto' }} /></button>
+            <button className="menu-item hl"><Avatar name={ws} tint="t-blue" size="sm" />{ws}<Icon n="check" s={15} style={{ marginLeft: 'auto' }} /></button>
             <button className="menu-item" onClick={() => { setWsOpen(false); toast('Creating workspaces is not part of this demo') }}><Icon n="plus" s={15} />New workspace</button>
           </Pop>
         </div>
@@ -119,6 +130,7 @@ export function Shell() {
       </aside>
 
       <main className={'main' + (isReview ? ' flush' : '')}><Outlet /></main>
+      {!isMock && !wired && <PreviewNote sample={isDemoWorkspace(s.user)} />}
 
       {!s.askOpen && (
         <button className="ask-fab" onClick={() => setState(() => ({ askOpen: true }))}>

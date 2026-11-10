@@ -5,10 +5,13 @@ import { Avatar, Field, Modal, ST_VAR, companyName, contactById, downloadCSV, us
 import { idOk, CSV_MAX_ROWS, FORMULA_START, LIMITS, clean, csvFileErr, decodeUtf8, domainErr, stripFormulaStart, emailErr, emailOk, nameErr, normEmail, parseCSV, personErr, phoneErr } from '../data/validate'
 import { addCompany, addContact, toast, useStore, nid, setState, logAudit } from '../store'
 import { money, stageLabel } from '../data/seed'
+import { isMock } from '../api'
+import { CompaniesLive, CompanyDetailLive } from './CompaniesLive'
+import { ContactsLive, ContactDetailLive } from './ContactsLive'
 
 const statusEl = (s: string) => <span className={s === 'Active' ? 'st-act' : s === 'Opted out' ? 'st-act st-opt' : 'st-act st-sus'}>{s}</span>
 
-export function Contacts() {
+function ContactsMock() {
   useTitle('Contacts')
   const nav = useNavigate()
   const contacts = useStore((s) => s.contacts)
@@ -126,7 +129,7 @@ function ImportCSV({ onClose }: { onClose: () => void }) {
   )
 }
 
-export function ContactDetail() {
+function ContactDetailMock() {
   const { id } = useParams()
   const c = useStore((s) => (idOk(id) ? s.contacts.find((x) => x.id === id) : undefined))
   const allDeals = useStore((s) => s.deals); const allThreads = useStore((s) => s.threads)
@@ -168,7 +171,7 @@ export function ContactDetail() {
   )
 }
 
-export function Companies() {
+function CompaniesMock() {
   useTitle('Companies')
   const nav = useNavigate()
   const companies = useStore((s) => s.companies); const deals = useStore((s) => s.deals); const contacts = useStore((s) => s.contacts)
@@ -211,7 +214,7 @@ function AddCompany({ onClose }: { onClose: () => void }) {
   )
 }
 
-export function CompanyDetail() {
+function CompanyDetailMock() {
   const { id } = useParams()
   const co = useStore((s) => (idOk(id) ? s.companies.find((x) => x.id === id) : undefined))
   const allPeople = useStore((s) => s.contacts); const allDeals = useStore((s) => s.deals)
@@ -249,3 +252,9 @@ export function CompanyDetail() {
   )
 }
 void contactById; void nid
+
+/* Real mode talks to the API (CompaniesLive.tsx). Mock mode keeps the in-memory screens above, which the demo and the e2e tests use. */
+export const Contacts = isMock ? ContactsMock : ContactsLive
+export const ContactDetail = isMock ? ContactDetailMock : ContactDetailLive
+export const Companies = isMock ? CompaniesMock : CompaniesLive
+export const CompanyDetail = isMock ? CompanyDetailMock : CompanyDetailLive

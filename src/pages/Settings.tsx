@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Navigate, useParams } from 'react-router-dom'
 import { Icon, GoogleG, MsLogo } from '../components/Icons'
 import { Avatar, Field, Modal, ReplyMark, Toggle, downloadCSV, emailOk, pwScore, useTitle } from '../components/ui'
 import { LIMITS, clean, emailErr, nameErr, normEmail, passwordErr, personErr, phoneErr, textErr } from '../data/validate'
-import { api, apiMessage, fieldMessages } from '../api'
+import { api, apiMessage, browserTimeZone, fieldMessages, isMock } from '../api'
+import type { ProfilePatch, StageRow, WorkspacePatch } from '../api/profile'
+import { COUNTRY_CODES, joinPhone, splitPhone, timeZones, to12h, to24h } from '../data/phone'
 import { useSubmit } from '../components/guards'
-import { logAudit, nid, patch, setSettings, setTheme, toast, useStore } from '../store'
+import { getState, logAudit, nid, patch, setSettings, setTheme, setUser, toast, useStore } from '../store'
 import { REPLY_TYPES, type Fact, type Member } from '../data/seed'
 
 const TABS = [
@@ -43,18 +45,39 @@ function Head({ t, d, children }: { t: string; d?: string; children?: React.Reac
 
 function Profile() {
   const theme = useStore((s) => s.settings.theme)
-  const [name, setName] = useState('Mahad Baig'); const [phone, setPhone] = useState('300 5550142'); const [tz, setTz] = useState('Asia/Karachi')
-  const [tried, setTried] = useState(false)
-  const e = { name: personErr(name), phone: phoneErr(phone) }
+  const user = useStore((s) => s.user)
+  const { busy, run } = useSubmit()
+  const first = splitPhone(user?.phone)
+  const [name, setName] = useState(user?.name ?? ''); const [code, setCode] = useState(first.code); const [phone, setPhone] = useState(first.national)
+  const [tz, setTz] = useState(user?.timezone ?? browserTimeZone())
+  const [tried, setTried] = useState(false); const [srv, setSrv] = useState<Record<string, string>>({}); const [msg, setMsg] = useState('')
+  const zones = useMemo(() => timeZones(user?.timezone), [user?.timezone])
+  const e = { name: personErr(name), phone: code === '' && phone.trim() && !phone.trim().startsWith('+') ? 'Start the number with + and the country code.' : phoneErr(phone) }
+  const save = () => {
+    setTried(true); setSrv({}); setMsg('')
+    if (e.name || e.phone || !user) return
+    // Send only what changed. Nothing is shown as saved until the server has answered.
+    const wanted = { name: clean(name), phone: phone.trim() ? joinPhone(code, phone) : null, timezone: tz }
+    const patch: ProfilePatch = {}
+    if (wanted.name !== user.name) patch.name = wanted.name
+    if (wanted.phone !== (user.phone ?? null)) patch.phone = wanted.phone
+    if (wanted.timezone !== user.timezone) patch.timezone = wanted.timezone
+    if (Object.keys(patch).length === 0) { toast('No changes to save'); return }
+    void run(async () => {
+      try { setUser(await api.profile.update(patch)); setTried(false); toast('Profile saved') }
+      catch (err) { const f = fieldMessages(err); setSrv({ name: f.name ?? '', phone: f.phone ?? '', timezone: f.timezone ?? '' }); setMsg(apiMessage(err)) }
+    })
+  }
   return (<>
     <div className="card set-card"><Head t="Profile" d="Your name appears on drafts you approve." />
       <div className="form-stack">
-        <Field label="Full name" error={tried ? e.name : ''}><input className={'input' + (tried && e.name ? ' invalid' : '')} maxLength={LIMITS.name} autoComplete="name" value={name} onChange={(x) => setName(x.target.value)} /></Field>
-        <Field label="Email" hint="Email is your sign-in. Contact support to change it."><input className="input readonly" value="mahad@acme.co" readOnly /></Field>
-        <Field label="Phone" opt error={tried ? e.phone : ''}><div className="phone-row"><select className="select" defaultValue="+92"><option>+92</option><option>+1</option><option>+44</option><option>+971</option></select><input className={'input' + (tried && e.phone ? ' invalid' : '')} type="tel" inputMode="tel" autoComplete="tel-national" maxLength={LIMITS.phone} value={phone} onChange={(x) => setPhone(x.target.value)} /></div></Field>
-        <Field label="Time zone"><select className="select" value={tz} onChange={(x) => setTz(x.target.value)}>{['Asia/Karachi', 'Europe/London', 'America/New_York', 'Asia/Dubai'].map((z) => <option key={z}>{z}</option>)}</select></Field>
+        {msg && <div className="callout amber" role="alert"><i className="dot round" />{msg}</div>}
+        <Field label="Full name" error={(tried ? e.name : '') || srv.name}><input className={'input' + ((tried && e.name) || srv.name ? ' invalid' : '')} maxLength={LIMITS.name} autoComplete="name" value={name} onChange={(x) => { setName(x.target.value); setSrv({}) }} /></Field>
+        <Field label="Email" hint="Email is your sign-in. Contact support to change it."><input className="input readonly" value={user?.email ?? ''} readOnly /></Field>
+        <Field label="Phone" opt error={(tried ? e.phone : '') || srv.phone}><div className="phone-row"><select className="select" aria-label="Country code" value={code} onChange={(x) => setCode(x.target.value)}>{COUNTRY_CODES.map((c) => <option key={c}>{c}</option>)}<option value="">Other (type +code)</option></select><input className={'input' + ((tried && e.phone) || srv.phone ? ' invalid' : '')} type="tel" inputMode="tel" autoComplete="tel-national" maxLength={LIMITS.phone} value={phone} onChange={(x) => { setPhone(x.target.value); setSrv({}) }} /></div></Field>
+        <Field label="Time zone" error={srv.timezone}><select className="select" value={tz} onChange={(x) => setTz(x.target.value)}>{zones.map((z) => <option key={z}>{z}</option>)}</select></Field>
       </div>
-      <div className="actions-end"><button className="btn primary" onClick={() => { setTried(true); if (e.name || e.phone) return; setSettings({ tz }); toast('Profile saved') }}>Save changes</button></div></div>
+      <div className="actions-end"><button className="btn primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save changes'}</button></div></div>
     <div className="card set-card"><Head t="Appearance" d="Choose how Nudge looks on this device." />
       <div className="appearance">{([['light', 'Light'], ['dark', 'Dark'], ['system', 'System']] as const).map(([k, l]) => (
         <button key={k} className={'app-opt' + (theme === k ? ' on' : '')} onClick={() => setTheme(k)} role="radio" aria-checked={theme === k}><span className={'swatch ' + (k === 'dark' ? 'dark' : k === 'system' ? 'sys' : '')} />{l}</button>))}</div></div>
@@ -86,9 +109,96 @@ function Security() {
 }
 
 function Workspace() {
-  const st = useStore((s) => s.settings)
-  const [name, setName] = useState('Acme Sales'); const [stages, setStages] = useState(st.dealStages); const [nw, setNw] = useState('')
+  return (<>
+    <WorkspaceCard />
+    <QuietHours />
+    {isMock ? <StageEditor /> : <StageList />}
+  </>)
+}
+
+/** Workspace name and time zone: PATCH /organizations/current/ (Owner and Admin). Shown as saved only after the server answers. */
+function WorkspaceCard() {
+  const user = useStore((s) => s.user)
+  const tzStore = useStore((s) => s.settings.tz)
+  const org = user?.organization
+  const canEdit = isMock || user?.role === 'owner' || user?.role === 'admin'
+  const [name, setName] = useState(org?.name ?? 'Acme Sales'); const [tz, setTz] = useState(org?.timezone ?? tzStore)
+  const [tried, setTried] = useState(false); const [srv, setSrv] = useState<Record<string, string>>({}); const [msg, setMsg] = useState('')
+  const { busy, run } = useSubmit()
+  const zones = useMemo(() => timeZones(org?.timezone ?? tzStore), [org?.timezone, tzStore])
   const wsErr = nameErr(name, 'workspace name', 2, LIMITS.company)
+  const save = () => {
+    setTried(true); setSrv({}); setMsg('')
+    if (wsErr || !user || !canEdit) return
+    const patch: WorkspacePatch = {}
+    if (clean(name) !== org?.name) patch.name = clean(name)
+    if (tz !== org?.timezone) patch.timezone = tz
+    if (Object.keys(patch).length === 0) { toast('No changes to save'); return }
+    void run(async () => {
+      try { setUser(await api.workspace.update(patch)); setTried(false); toast('Workspace saved') }
+      catch (err) { const f = fieldMessages(err); setSrv({ name: f.name ?? '', timezone: f.timezone ?? '' }); setMsg(apiMessage(err)) }
+    })
+  }
+  return (
+    <div className="card set-card"><Head t="Workspace" d={canEdit ? undefined : 'Only owners and admins can change these.'} /><div className="form-stack">
+      {msg && <div className="callout amber" role="alert"><i className="dot round" />{msg}</div>}
+      <Field label="Workspace name" error={(tried ? wsErr : '') || srv.name}><input className={'input' + ((tried && wsErr) || srv.name ? ' invalid' : '')} maxLength={LIMITS.company} value={name} disabled={!canEdit} onChange={(e) => { setName(e.target.value); setSrv({}) }} /></Field>
+      <Field label="Time zone" error={srv.timezone}><select className="select" value={tz} disabled={!canEdit} onChange={(e) => setTz(e.target.value)}>{zones.map((z) => <option key={z}>{z}</option>)}</select></Field></div>
+      {canEdit && <div className="actions-end"><button className="btn primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save changes'}</button></div>}</div>
+  )
+}
+
+const QUIET_FROM = ['6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM', '10:00 PM']
+const QUIET_TO = ['6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM']
+
+/** Quiet hours belong to the user (PATCH /auth/me/, 24-hour HH:MM, both set or both empty). Off means both cleared. */
+function QuietHours() {
+  const user = useStore((s) => s.user)
+  const st = useStore((s) => s.settings)
+  const [on, setOn] = useState(isMock ? st.quietOn : !!(user?.quietStart && user?.quietEnd))
+  const [from, setFrom] = useState(isMock ? st.quietFrom : user?.quietStart ? to12h(user.quietStart) : '8:00 PM')
+  const [to, setTo] = useState(isMock ? st.quietTo : user?.quietEnd ? to12h(user.quietEnd) : '8:00 AM')
+  const [msg, setMsg] = useState(''); const { busy, run } = useSubmit()
+  const opts = (base: string[], cur: string) => (base.includes(cur) ? base : [cur, ...base])
+  const save = () => {
+    setMsg('')
+    const patch: ProfilePatch = on ? { quietStart: to24h(from), quietEnd: to24h(to) } : { quietStart: null, quietEnd: null }
+    void run(async () => {
+      try { setUser(await api.profile.update(patch)); setSettings({ quietOn: on, quietFrom: from, quietTo: to }); toast('Quiet hours saved') }
+      catch (err) { const f = fieldMessages(err); setMsg(f.quiet_hours_start ?? f.quiet_hours_end ?? apiMessage(err)) }
+    })
+  }
+  return (
+    <div className="card set-card"><Head t="Quiet hours" d="Nudge holds approved sends outside these hours." />
+      {msg && <div className="callout amber" role="alert"><i className="dot round" />{msg}</div>}
+      <div className="set-row" style={{ borderTop: 0 }}><div className="grow"><b>Hold sends overnight</b></div><Toggle on={on} label="Quiet hours" onChange={setOn} /></div>
+      {on && <div className="time-row"><Field label="From"><select className="select" value={from} onChange={(e) => setFrom(e.target.value)}>{opts(QUIET_FROM, from).map((t) => <option key={t}>{t}</option>)}</select></Field>
+        <Field label="To"><select className="select" value={to} onChange={(e) => setTo(e.target.value)}>{opts(QUIET_TO, to).map((t) => <option key={t}>{t}</option>)}</select></Field></div>}
+      <div className="actions-end"><button className="btn primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save quiet hours'}</button></div></div>
+  )
+}
+
+/** Real mode: the organization's stages as the server has them. Read-only until the stage editor is wired. */
+function StageList() {
+  const [rows, setRows] = useState<StageRow[] | null>(null); const [err, setErr] = useState('')
+  useEffect(() => {
+    let live = true
+    api.workspace.stages().then((r) => { if (live) setRows(r) }).catch((e) => { if (live) setErr(apiMessage(e)) })
+    return () => { live = false }
+  }, [])
+  return (
+    <div className="card set-card"><Head t="Deal stages" d="Your pipeline stages, in order. Editing them is coming next." />
+      {err && <div className="callout amber" role="alert"><i className="dot round" />{err}</div>}
+      {!rows && !err && <p className="muted" role="status">Loading…</p>}
+      <div className="stage-list">{(rows ?? []).map((r, i) => (
+        <div className="stage-li" key={r.id}><span className="n">{i + 1}</span><i className="dot round" /><span className="grow">{r.name}{r.outcome !== 'open' && <span className="w"> · fixed</span>}</span><span className="muted">{r.deal_count} {r.deal_count === 1 ? 'deal' : 'deals'}</span></div>))}</div></div>
+  )
+}
+
+/** Mock mode only: the editable list the demo has always had. */
+function StageEditor() {
+  const st = useStore((s) => s.settings)
+  const [stages, setStages] = useState(st.dealStages); const [nw, setNw] = useState('')
   const [stTried, setStTried] = useState(false)
   const stageErr = (list: string[]) => list.map((x, i) => {
     const t = clean(x)
@@ -101,16 +211,7 @@ function Workspace() {
   const sErr = stageErr(stages)
   const nwErr = !clean(nw) ? '' : stageErr([...stages, nw]).pop() ?? ''
   const mv = (i: number, d: number) => { if (i < 1 || i + d < 1 || i + d > stages.length - 3) return; const a = [...stages]; [a[i], a[i + d]] = [a[i + d], a[i]]; setStages(a) }
-  return (<>
-    <div className="card set-card"><Head t="Workspace" /><div className="form-stack">
-      <Field label="Workspace name" error={wsErr}><input className={'input' + (wsErr ? ' invalid' : '')} maxLength={LIMITS.company} value={name} onChange={(e) => setName(e.target.value)} /></Field>
-      <Field label="Default currency" hint="Deals keep their own currency. USD and PKR are never added together."><select className="select" defaultValue="USD"><option>USD</option><option>PKR</option></select></Field>
-      <Field label="Time zone"><select className="select" value={st.tz} onChange={(e) => setSettings({ tz: e.target.value })}>{['Asia/Karachi', 'Europe/London', 'America/New_York'].map((z) => <option key={z}>{z}</option>)}</select></Field></div>
-      <div className="actions-end"><button className="btn primary" onClick={() => { if (wsErr) return; toast('Workspace saved') }}>Save changes</button></div></div>
-    <div className="card set-card"><Head t="Quiet hours" d="Nudge holds approved sends outside these hours." />
-      <div className="set-row" style={{ borderTop: 0 }}><div className="grow"><b>Hold sends overnight</b></div><Toggle on={st.quietOn} label="Quiet hours" onChange={(v) => setSettings({ quietOn: v })} /></div>
-      {st.quietOn && <div className="time-row"><Field label="From"><select className="select" value={st.quietFrom} onChange={(e) => setSettings({ quietFrom: e.target.value })}>{['6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM', '10:00 PM'].map((t) => <option key={t}>{t}</option>)}</select></Field>
-        <Field label="To"><select className="select" value={st.quietTo} onChange={(e) => setSettings({ quietTo: e.target.value })}>{['6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM'].map((t) => <option key={t}>{t}</option>)}</select></Field></div>}</div>
+  return (
     <div className="card set-card"><Head t="Deal stages" d="Won and Lost are fixed. Rename or reorder the rest." />
       <div className="stage-list">{stages.map((s, i) => { const fixed = i >= stages.length - 2; return (
         <div className="stage-li" key={i}><span className="n">{i + 1}</span><i className="dot round" style={{ background: `var(--st-${['new', 'contacted', 'meeting', 'proposal', 'negotiation', 'won', 'lost'][Math.min(i, 6)]})` }} />
@@ -118,7 +219,7 @@ function Workspace() {
           {!fixed && <span className="row" style={{ gap: 2 }}><button className="icon-btn" aria-label="Move up" onClick={() => mv(i, -1)}><Icon n="chevD" s={15} style={{ transform: 'rotate(180deg)' }} /></button><button className="icon-btn" aria-label="Move down" onClick={() => mv(i, 1)}><Icon n="chevD" s={15} /></button></span>}</div>)})}</div>
       <div className="row" style={{ marginTop: 14 }}><input className={'input' + (nwErr ? ' invalid' : '')} style={{ maxWidth: 280, height: 36 }} maxLength={LIMITS.stage + 10} placeholder="New stage name" value={nw} onChange={(e) => setNw(e.target.value)} /><button className="btn" disabled={!clean(nw) || !!nwErr || stages.length >= 12} onClick={() => { const a = [...stages]; a.splice(a.length - 2, 0, clean(nw)); setStages(a); setNw('') }}>Add stage</button>{nwErr && <span className="err">{nwErr}</span>}{stages.length >= 12 && <span className="hint">Twelve stages is the limit.</span>}</div>
       <div className="actions-end"><button className="btn primary" onClick={() => { setStTried(true); if (sErr.some(Boolean)) { toast('Fix the stage names first'); return } setSettings({ dealStages: stages.map(clean) }); toast('Stages saved') }}>Save stages</button></div></div>
-  </>)
+  )
 }
 
 function Team() {
@@ -162,7 +263,7 @@ function Mailboxes() {
           : <button className="btn sm danger" onClick={() => { patch('mailboxes', (a) => a.filter((x) => x.id !== m.id)); toast(m.email + ' disconnected') }}>Disconnect</button>}</div>)}</div>
     {add && <Modal title="Connect a mailbox" onClose={() => setAdd(false)}>
       {[['Google', <GoogleG key="g" s={20} />, 'Gmail and Google Workspace'], ['Microsoft', <MsLogo key="m" s={20} />, 'Outlook and Microsoft 365']].map(([p, ic, d]) => (
-        <button key={p as string} className="provider" style={{ justifyContent: 'flex-start', padding: '0 16px' }} onClick={() => { const em = `new${mbs.length}@acme.co`; patch('mailboxes', (a) => [...a, { id: nid('m'), email: em, provider: p as 'Google', status: 'ok', sync: 'Synced just now', owner: 'Mahad Baig' }]); toast(em + ' connected'); setAdd(false) }}>{ic}<span>{p as string}</span><span className="muted" style={{ marginLeft: 'auto', fontSize: 13 }}>{d as string}</span></button>))}
+        <button key={p as string} className="provider" style={{ justifyContent: 'flex-start', padding: '0 16px' }} onClick={() => { const em = `new${mbs.length}@acme.co`; patch('mailboxes', (a) => [...a, { id: nid('m'), email: em, provider: p as 'Google', status: 'ok', sync: 'Synced just now', owner: getState().user?.name ?? '' }]); toast(em + ' connected'); setAdd(false) }}>{ic}<span>{p as string}</span><span className="muted" style={{ marginLeft: 'auto', fontSize: 13 }}>{d as string}</span></button>))}
       <p className="hint">In this demo, connecting adds a sample mailbox.</p></Modal>}
   </>)
 }
@@ -209,8 +310,8 @@ function FactModal({ fact, onClose }: { fact: Fact | null; onClose: () => void }
   }
   return (<Modal title={fact ? 'Edit fact' : 'Add fact'} onClose={onClose} foot={<><span className="note">Only state what is true today.</span><div className="row"><button className="btn" onClick={onClose}>Cancel</button>
     <button className="btn primary" onClick={() => { setTried(true); if (e.key || e.val) return
-      if (fact) patch('facts', (a) => a.map((x) => (x.id === fact.id ? { ...x, key: clean(key), value: clean(val), when: 'Updated just now', by: 'Mahad Baig' } : x)))
-      else patch('facts', (a) => [...a, { id: nid('fa'), key: clean(key), value: clean(val), on: true, by: 'Mahad Baig', when: 'Added just now' }])
+      if (fact) patch('facts', (a) => a.map((x) => (x.id === fact.id ? { ...x, key: clean(key), value: clean(val), when: 'Updated just now', by: getState().user?.name ?? '' } : x)))
+      else patch('facts', (a) => [...a, { id: nid('fa'), key: clean(key), value: clean(val), on: true, by: getState().user?.name ?? '', when: 'Added just now' }])
       logAudit(fact ? 'Changed approved fact' : 'Added approved fact', key); toast('Fact saved'); onClose() }}>Save</button></div></>}>
     <Field label="Name" error={tried ? e.key : ''}><input className={'input' + (tried && e.key ? ' invalid' : '')} maxLength={70} value={key} onChange={(x) => setKey(x.target.value)} autoFocus /></Field>
     <Field label="What Nudge may say" error={tried ? e.val : ''}><textarea className={'textarea' + (tried && e.val ? ' invalid' : '')} rows={3} maxLength={LIMITS.fact + 20} value={val} onChange={(x) => setVal(x.target.value)} /><span className="hint">{clean(val).length}/{LIMITS.fact}</span></Field></Modal>)

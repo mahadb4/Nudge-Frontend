@@ -244,7 +244,7 @@ describe('auth calls (real mode)', () => {
     const s = serve({ 'GET /auth/csrf/': csrfOk(), 'POST /auth/login/': () => json(200, { access: 'a', user: ME }) })
     const u = await auth.login({ email: 'Sara@X.com', password: 'pw', remember: false })
     expect(body(s, 'POST /auth/login/')).toEqual({ email: 'sara@x.com', password: 'pw', remember: false })
-    expect(u).toEqual({ name: 'Sara Ali', email: 'sara@x.com', type: 'business', verified: true })
+    expect(u).toMatchObject({ name: 'Sara Ali', email: 'sara@x.com', type: 'business', verified: true })
   })
   it('logout calls the API and drops the token', async () => {
     const { auth } = await import('../../src/api/auth'); const c = await import('../../src/api/client')
@@ -300,8 +300,9 @@ describe('auth rules (mock mode)', () => {
 })
 
 describe('sign-out clears the in-memory store', () => {
+  afterEach(() => vi.unstubAllEnvs())
   it('hydrate fills it, clear empties every private list and keeps only the theme', async () => {
-    vi.resetModules()
+    vi.resetModules(); vi.stubEnv('VITE_USE_MOCK_API', 'true')
     const s = await import('../../src/store'); const { DEMO_USER } = await import('../../src/api/auth')
     expect(s.getState().deals).toHaveLength(0); expect(s.hasSession()).toBe(false)
     s.hydrateWorkspace(DEMO_USER)
@@ -313,7 +314,7 @@ describe('sign-out clears the in-memory store', () => {
     expect(st.settings.theme).toBe('dark')
   })
   it('refuses to approve to an opted-out contact, an empty draft, or twice', async () => {
-    vi.resetModules()
+    vi.resetModules(); vi.stubEnv('VITE_USE_MOCK_API', 'true')
     const s = await import('../../src/store'); const { DEMO_USER } = await import('../../src/api/auth'); s.hydrateWorkspace(DEMO_USER)
     s.setReviewDraft('r1', '   '); s.approveReview('r1'); expect(s.getState().reviews.find((r) => r.id === 'r1')!.status).toBe('pending')
     s.setReviewDraft('r1', 'Thursday works.'); s.approveReview('r1'); s.approveReview('r1')

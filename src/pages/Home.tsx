@@ -11,6 +11,7 @@ function Spark({ pts, color = 'var(--ink-2)' }: { pts: number[]; color?: string 
 }
 
 export function Home() {
+  const me = useStore((x) => x.user?.name.split(' ')[0] ?? '')
   useTitle('Home')
   const nav = useNavigate()
   const s = useStore((x) => x)
@@ -30,7 +31,7 @@ export function Home() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1 className="h1">{greet}, Mahad</h1>
+          <h1 className="h1">{greet}{me ? ', ' + me : ''}</h1>
           <p className="page-sub">{pending.length ? <>{pending.length} {pending.length === 1 ? 'reply is' : 'replies are'} waiting for you. The rest of the day is quiet.</> : 'You are all caught up. Nothing is waiting for review.'}</p>
         </div>
         <button className="btn primary lg" onClick={() => nav('/app/review')}>Start review <span className="kbd">{pending.length}</span></button>

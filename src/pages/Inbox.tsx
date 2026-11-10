@@ -7,11 +7,12 @@ import { setState, useStore } from '../store'
 export function Inbox() {
   useTitle('Inbox')
   const nav = useNavigate()
+  const me = useStore((s) => s.user?.name ?? '')
   const threads = useStore((s) => s.threads)
   const mailboxes = useStore((s) => s.mailboxes)
   const [tab, setTab] = useState<'all' | 'waiting' | 'done'>('all')
   const [mb, setMb] = useState('all')
-  const [sel, setSel] = useState<string | null>(threads[0].id)
+  const [sel, setSel] = useState<string | null>(threads[0]?.id ?? null)
   const [open, setOpen] = useState(false)
 
   const list = threads.filter((t) => (tab === 'all' || t.status === tab) && (mb === 'all' || t.mailbox === mb))
@@ -68,7 +69,7 @@ export function Inbox() {
                 </div>
                 {cur.messages.map((m, i) => (
                   <div className="msg" key={i}>
-                    <div className="msg-h">{m.from === 'them' ? <Avatar name={m.name} tint={c.tint} size="sm" /> : <Avatar name="Mahad Baig" tint="t-blue" size="sm" />}<b>{m.name}</b><span className="mono">{m.time}</span></div>
+                    <div className="msg-h">{m.from === 'them' ? <Avatar name={m.name} tint={c.tint} size="sm" /> : <Avatar name={me} tint="t-blue" size="sm" />}<b>{m.name}</b><span className="mono">{m.time}</span></div>
                     <div className="msg-t">{m.text.split('\n\n').map((t, j) => <p key={j}>{t}</p>)}</div>
                   </div>
                 ))}

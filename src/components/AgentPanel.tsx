@@ -23,7 +23,7 @@ function reply(q: string, agent: boolean): Msg {
     return { text: `${f.length} follow-ups are due soon. I have drafted each one.`, list: f.map((x) => x.title + ', ' + x.due.toLowerCase()), links: [{ l: 'Open follow-ups', to: '/app/follow-ups' }] }
   }
   if (/meeting|calendar|schedule|today|week/.test(n))
-    return { text: `You have ${s.events.length} items coming up. The next is ${s.events[0].title} at ${s.events[0].time}.`, list: s.events.map((e) => `${e.date}, ${e.time}: ${e.title}`), links: [{ l: 'Open calendar', to: '/app/calendar' }] }
+    return { text: s.events[0] ? `You have ${s.events.length} items coming up. The next is ${s.events[0].title} at ${s.events[0].time}.` : 'Nothing is coming up.', list: s.events.map((e) => `${e.date}, ${e.time}: ${e.title}`), links: [{ l: 'Open calendar', to: '/app/calendar' }] }
   if (/sara|northwind/.test(n))
     return { text: 'Sara Ali asked for Thursday at 3 PM and wants to bring Lena Fox. My draft confirms the time. It is in Review, confidence 94.', links: [{ l: 'Review Sara\'s reply', to: '/app/review' }] }
   if (agent && /(draft|write|send|follow up|chase)/.test(n))
@@ -35,7 +35,7 @@ export function AgentPanel({ onClose, page }: { onClose?: () => void; page?: boo
   const nav = useNavigate()
   const mode = useStore((s) => s.settings.mode)
   const [agent, setAgent] = useState(false)
-  const [msgs, setMsgs] = useState<Msg[]>([{ text: 'Hi Mahad. Ask me about your replies, deals or week. I only read your approved facts and I never send on my own.' }])
+  const [msgs, setMsgs] = useState<Msg[]>([{ text: 'Hi ' + (getState().user?.name.split(' ')[0] ?? 'there') + '. Ask me about your replies, deals or week. I only read your approved facts and I never send on my own.' }])
   const [q, setQ] = useState('')
   const [busy, setBusy] = useState(false)
   const end = useRef<HTMLDivElement>(null)

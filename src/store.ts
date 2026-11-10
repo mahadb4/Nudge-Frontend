@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from 'react'
 import * as seed from './data/seed'
 import { LIMITS, cleanMulti, normEmail } from './data/validate'
+import { isMock } from './api/client'
+import { isDemoWorkspace } from './data/demoWorkspace'
 import type { Deal, Contact, Company, ReviewItem, Followup, Thread, Template, Fact, Mailbox, Member, AuditRow, Stage, ReplyType } from './data/seed'
 
 export type Theme = 'light' | 'dark' | 'system'
@@ -23,7 +25,13 @@ export interface State {
 const isTheme = (v: unknown): v is Theme => v === 'light' || v === 'dark' || v === 'system'
 const savedTheme: Theme = (() => { try { const t = localStorage.getItem('nudge.theme'); return isTheme(t) ? t : 'light' } catch { return 'light' } })()
 
-export type User = { name: string; email: string; type: 'individual' | 'business'; verified: boolean }
+export type Org = { id: string; name: string; type: 'individual' | 'business'; timezone: string }
+/** The signed-in user as GET /auth/me/ describes them. Everything after `verified` is missing in mock mode. */
+export type User = {
+  name: string; email: string; type: 'individual' | 'business'; verified: boolean
+  phone?: string | null; timezone?: string; quietStart?: string | null; quietEnd?: string | null
+  organization?: Org; role?: 'owner' | 'admin' | 'manager' | 'member'
+}
 
 const defaultSettings = (theme: Theme): Settings => ({
   theme, mode: 'draft', approvals: 32, threshold: 85, quietOn: true, quietFrom: '8:00 PM', quietTo: '8:00 AM', tz: 'Asia/Karachi',
@@ -73,8 +81,8 @@ export const dismissToast = (id: number) => setState((s) => ({ toasts: s.toasts.
 
 let uid = 100
 export const nid = (p: string) => p + uid++
-export const logAudit = (action: string, on: string, who = 'Mahad Baig') =>
-  setState((s) => ({ audit: [{ id: nid('au'), time: 'Just now', who, ini: who === 'Nudge' ? 'N' : 'MB', tint: who === 'Nudge' ? 't-grey' : 't-blue', action, on }, ...s.audit] }))
+export const logAudit = (action: string, on: string, who = state.user?.name ?? 'You') =>
+  setState((s) => ({ audit: [{ id: nid('au'), time: 'Just now', who, ini: who === 'Nudge' ? 'N' : who.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join(''), tint: who === 'Nudge' ? 't-grey' : 't-blue', action, on }, ...s.audit] }))
 
 /* ---- deals ---- */
 export function moveDeal(id: string, stage: Stage, lostReason?: string) {
@@ -171,6 +179,8 @@ const copy = <T,>(v: T): T => structuredClone(v)
 
 /** Load the workspace after a successful sign-in. Mock data now; one API call later. */
 export function hydrateWorkspace(user: User) {
+  /* Real users get empty lists on screens that have no backend yet. Only mock mode and the demo workspace get the sample data. */
+  if (!isMock && !isDemoWorkspace(user)) { setState((s) => ({ ...blank(s.settings.theme), user })); return }
   setState((s) => ({
     ...blank(s.settings.theme), user,
     deals: copy(seed.deals), contacts: copy(seed.contacts), companies: copy(seed.companies), reviews: copy(seed.reviews), followups: copy(seed.followups),
@@ -178,6 +188,8 @@ export function hydrateWorkspace(user: User) {
     events: copy(seed.events),
   }))
 }
+/** Replace the signed-in user, for example with the answer to a profile or organization update. */
+export const setUser = (user: User) => setState(() => ({ user }))
 /** Sign-out and 401: drop every private record from memory. Only the theme survives. */
 export function clearWorkspace() { setState((s) => blank(s.settings.theme)) }
 export const hasSession = () => getState().user !== null

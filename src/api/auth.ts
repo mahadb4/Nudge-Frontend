@@ -12,14 +12,19 @@ const wait = (ms = 350) => new Promise<void>((r) => setTimeout(r, ms))
 
 export type AccountType = 'individual' | 'business'
 
-export const DEMO_USER: User = { name: 'Mahad Baig', email: 'mahad@acme.co', type: 'business', verified: true }
+export const DEMO_USER: User = { name: 'Mahad Baig', email: 'mahad@acme.co', type: 'business', verified: true, phone: '+923005550142', timezone: 'Asia/Karachi' }
 
 /** The browser's IANA time zone, sent at sign-up and shown on the form. */
 export const browserTimeZone = (): string => {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' } catch { return 'UTC' }
 }
 
-const toUser = (m: MeDto): User => ({ name: m.name, email: m.email, type: m.type, verified: m.verified })
+/** The API's /auth/me/ shape (snake_case) as the app's User. */
+export const toUser = (m: MeDto): User => ({
+  name: m.name, email: m.email, type: m.type, verified: m.verified,
+  phone: m.phone ?? null, timezone: m.timezone, quietStart: m.quiet_hours_start ?? null, quietEnd: m.quiet_hours_end ?? null,
+  organization: m.organization, role: m.role,
+})
 
 /** Sign-in and verify both answer { access, user }. The token goes to memory, the user to the caller. */
 const startSession = (r: { access: string; user: MeDto }): User => { setAccessToken(r.access); return toUser(r.user) }

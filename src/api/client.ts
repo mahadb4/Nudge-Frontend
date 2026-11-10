@@ -20,7 +20,7 @@ export const API_BASE = '/api/v1'
 
 export { MESSAGES }
 
-export type ApiCode = 'network' | 'timeout' | 'unauthorized' | 'forbidden' | 'rate_limited' | 'not_found' | 'invalid' | 'server' | 'bad_credentials' | 'invalid_code'
+export type ApiCode = 'network' | 'timeout' | 'unauthorized' | 'forbidden' | 'rate_limited' | 'not_found' | 'invalid' | 'server' | 'conflict' | 'bad_credentials' | 'invalid_code'
 
 export class ApiError extends Error {
   status: number
@@ -32,19 +32,30 @@ export class ApiError extends Error {
   fields: string[]
   /** Per-field backend codes, e.g. { email: 'VALIDATION_EMAIL_INVALID' }. */
   fieldCodes: Record<string, string>
-  constructor(status: number, code: ApiCode, message: string, extra: { retryAfter?: number; fields?: string[]; apiCode?: string; fieldCodes?: Record<string, string> } = {}) {
+  /** On a 409 version conflict: the row as the server has it now. */
+  current?: unknown
+  /** On a 409 duplicate contact: the existing contact the caller may see. */
+  existing?: { id: string; name: string }
+  constructor(status: number, code: ApiCode, message: string, extra: { retryAfter?: number; fields?: string[]; apiCode?: string; fieldCodes?: Record<string, string>; current?: unknown; existing?: { id: string; name: string } } = {}) {
     super(message)
     this.name = 'ApiError'
     this.status = status; this.code = code
     this.apiCode = extra.apiCode ?? ''
     this.retryAfter = extra.retryAfter
     this.fieldCodes = extra.fieldCodes ?? {}
+    this.current = extra.current; this.existing = extra.existing
     this.fields = extra.fields ?? Object.keys(this.fieldCodes)
   }
 }
 
 /** What the sign-in, verify and refresh calls return as `user`. Only what the app uses. */
-export interface MeDto { name: string; email: string; type: 'individual' | 'business'; verified: boolean }
+export interface MeDto {
+  name: string; email: string; type: 'individual' | 'business'; verified: boolean
+  phone?: string | null; timezone?: string; quiet_hours_start?: string | null; quiet_hours_end?: string | null
+  organization?: { id: string; name: string; type: 'individual' | 'business'; timezone: string }
+  role?: 'owner' | 'admin' | 'manager' | 'member'
+  organizations?: Array<{ id: string; name: string; role: string }>
+}
 
 /* ---------------- session state (memory only) ---------------- */
 
@@ -68,7 +79,7 @@ export const endSession = () => setAccessToken(null)
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
 /** Paths are written by us, never built from user text. This is a guard against a future slip. */
-const PATH_OK = /^\/[A-Za-z0-9_\-./]*(\?[A-Za-z0-9_\-=&.]*)?$/
+const PATH_OK = /^\/[A-Za-z0-9_\-./]*(\?[A-Za-z0-9_\-=&.%+]*)?$/
 
 /** Calls where a 401 means "wrong input", not "token expired", so they never trigger a refresh. */
 const NO_REFRESH = new Set(['/auth/csrf/', '/auth/register/', '/auth/verify/', '/auth/resend/', '/auth/login/', '/auth/refresh/', '/auth/logout/', '/auth/reset/', '/auth/reset/confirm/'])
@@ -194,11 +205,14 @@ function toError(r: Raw): ApiError {
       if (FIELD_SHAPE.test(k) && typeof c === 'string' && CODE_SHAPE.test(c)) fieldCodes[k] = c
     }
   }
-  const extra = { retryAfter, apiCode: code, fieldCodes }
+  const b = r.body && typeof r.body === 'object' ? (r.body as { current?: unknown; existing?: { id?: unknown; name?: unknown } }) : {}
+  const ex = b.existing && typeof b.existing.id === 'string' && typeof b.existing.name === 'string' ? { id: b.existing.id, name: b.existing.name } : undefined
+  const extra = { retryAfter, apiCode: code, fieldCodes, current: b.current, existing: ex }
   switch (r.status) {
     case 401: return new ApiError(401, code === Code.BAD_CREDENTIALS ? 'bad_credentials' : 'unauthorized', message, extra)
     case 403: return new ApiError(403, 'forbidden', message, extra)
     case 404: return new ApiError(404, 'not_found', message, extra)
+    case 409: return new ApiError(409, 'conflict', message, extra)
     case 429: return new ApiError(429, 'rate_limited', message, extra)
     case 400: case 422: return new ApiError(r.status, code === Code.INVALID_CODE ? 'invalid_code' : 'invalid', message, extra)
     default: return new ApiError(r.status, 'server', message, extra)

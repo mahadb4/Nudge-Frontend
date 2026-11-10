@@ -14,7 +14,7 @@ export function Review() {
   const threshold = useStore((s) => s.settings.threshold)
   const deals = useStore((s) => s.deals)
   const approvedToday = useStore((s) => s.approvedToday)
-  const [sel, setSel] = useState<string>(reviews.find((r) => r.status === 'pending')?.id ?? reviews[0].id)
+  const [sel, setSel] = useState<string>(reviews.find((r) => r.status === 'pending')?.id ?? reviews[0]?.id ?? '')
   const [rejecting, setRejecting] = useState(false)
   const [reason, setReason] = useState('')
   const [note, setNote] = useState('')

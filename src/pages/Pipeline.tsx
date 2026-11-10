@@ -115,7 +115,7 @@ function AddDeal({ onClose }: { onClose: () => void }) {
   const nav = useNavigate()
   const [name, setName] = useState(''); const [company, setCompany] = useState(''); const [contact, setContact] = useState('')
   const [amount, setAmount] = useState(''); const [currency, setCurrency] = useState<Currency>('USD'); const [stage, setStage] = useState<Stage>('new')
-  const [owner, setOwner] = useState('Mahad Baig'); const [close, setClose] = useState(''); const [tried, setTried] = useState(false)
+  const [owner, setOwner] = useState(getState().user?.name ?? ''); const [close, setClose] = useState(''); const [tried, setTried] = useState(false)
   const e = { name: nameErr(name, 'deal name', 2, LIMITS.name), amount: amountErr(amount), close: dateErr(close) }
   const bad = Object.values(e).some(Boolean) || !s.members.some((m) => m.name === owner)
   const contactsOfCompany = s.contacts.filter((c) => !company || c.companyId === company)
