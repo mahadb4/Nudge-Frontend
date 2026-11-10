@@ -58,18 +58,21 @@ export function Icon({ n, s = 18, w = 1.7, style, className }: { n: keyof typeof
   )
 }
 
-export function Logo({ size = 26 }: { size?: number }) {
+/** The logo tile. The only place the mark is drawn in the app; public/favicon.svg is the same drawing.
+    The symbol spans about 58% of the tile (a 92% box around a glyph that fills 63% of it). Size and colours are in CSS (.brand-mark). */
+export function Logo({ size }: { size?: number }) {
   return (
-    <span className="brand-mark" style={{ width: size, height: size }}>
-      <svg width={size * 0.62} height={size * 0.62} viewBox="0 0 24 24" fill="none">
+    <span className="brand-mark" style={size ? { width: size, height: size } : undefined} aria-hidden="true">
+      <svg width="92%" height="92%" viewBox="0 0 24 24" fill="none">
         <circle cx="7" cy="12" r="2.6" fill="#fff" />
-        <path d="m12 6 6 6-6 6" stroke="#3ecf8e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="m12 6 6 6-6 6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </span>
   )
 }
-export const Brand = ({ size }: { size?: number }) => (
-  <span className="brand"><Logo size={size} /> Nudge</span>
+/** Tile and wordmark together. Use this everywhere the product name is shown as a logo. */
+export const Brand = () => (
+  <span className="brand"><Logo />Nudge</span>
 )
 
 export function GoogleG({ s = 18 }: { s?: number }) {

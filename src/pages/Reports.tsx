@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../components/Icons'
-import { ST_VAR, downloadCSV, useTitle, ReplyMark } from '../components/ui'
+import { ST_VAR, Segmented, downloadCSV, useTitle, ReplyMark } from '../components/ui'
 import { toast, useStore } from '../store'
 import { STAGES, money, typeMix, rtLabel, type ReplyType } from '../data/seed'
 
@@ -38,7 +38,7 @@ export function Reports() {
   return (
     <div className="page">
       <div className="page-head"><div><h1 className="h1">Reports</h1><p className="page-sub">How well Nudge understands your customers, and where your deals stand.</p></div>
-        <div className="row"><div className="seg">{([7, 30, 90] as const).map((r) => <button key={r} className={range === r ? 'on' : ''} onClick={() => setRange(r)}>{r} days</button>)}</div>
+        <div className="row"><Segmented label="Date range" value={range} onChange={setRange} options={([7, 30, 90] as const).map((r) => ({ value: r, label: r + ' days' }))} />
           <button className="btn" onClick={() => { downloadCSV('nudge-report-' + range + 'd.csv', [['Reply type', 'Replies', 'Accuracy %'], ...typeMix.map((t) => [rtLabel(t.t), Math.round(t.n * mult), BY_TYPE[t.t]])]); toast('Report exported') }}><Icon n="download" s={15} />Export CSV</button></div></div>
 
       <div className="stat-row plain">

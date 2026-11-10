@@ -167,16 +167,7 @@ sup.ref, .ref { font-family: var(--font-mono); font-size: 10px; color: var(--ink
 .tbl tbody tr.click { cursor: pointer; }
 .tbl tbody tr.click:hover { background: var(--hover); }
 
-.tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--hair); }
-.tabs button { background: none; border: 0; padding: 10px 0 11px; font-size: 14px; color: var(--approve); position: relative; margin-bottom: -1px; }
-.tabs button .n { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); margin-left: 4px; }
-.tabs button.on { color: var(--ink); font-weight: 500; }
-.tabs button.on::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--ink); }
 
-.seg { display: inline-flex; padding: 3px; border-radius: 10px; border: 1px solid var(--hair); background: var(--surface); }
-.seg button { border: 0; background: none; height: 28px; padding: 0 13px; border-radius: 7px; font-size: 13px; color: var(--ink-2); }
-.seg button.on { background: var(--hover); color: var(--ink); font-weight: 500; box-shadow: inset 0 0 0 1px var(--hair); }
-.seg.vertical { flex-direction: column; }
 
 .callout { display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px; border-radius: 10px; font-size: 14px; }
 .callout.amber { background: var(--needs-soft); color: var(--ink); }
@@ -187,9 +178,21 @@ sup.ref, .ref { font-family: var(--font-mono); font-size: 10px; color: var(--ink
 /* ---------- App shell ---------- */
 .app { display: grid; grid-template-columns: 242px minmax(0, 1fr); grid-template-rows: 58px minmax(0, 1fr); height: 100vh; background: var(--shell); }
 .topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding: 0 18px; min-width: 0; }
-.brand { display: flex; align-items: center; gap: 9px; font-size: 18px; font-weight: 600; letter-spacing: -0.03em; }
-.brand-mark { width: 26px; height: 26px; border-radius: 8px; background: #171717; display: grid; place-items: center; flex: none; }
+/* Logo: one tile and one wordmark everywhere (see <Logo> and <Brand> in components/Icons.tsx). */
+.brand { display: flex; align-items: center; gap: 11px; font-size: 27px; font-weight: 700; letter-spacing: -0.045em; line-height: 1; color: var(--ink); }
+.brand-mark { width: 34px; height: 34px; border-radius: 10px; background: #171717; display: grid; place-items: center; flex: none; }
+.brand-mark path { stroke: var(--brand-green); }
 :root[data-theme='dark'] .brand-mark { background: #1f1f20; box-shadow: inset 0 0 0 1px #2c2c2e; }
+
+/* Segmented control: the one component for toggles and tab groups (<Segmented> in components/ui.tsx). */
+.segmented { display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; border: 1px solid var(--hair); background: var(--surface); max-width: 100%; }
+.segmented.block { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; width: 100%; }
+.segmented button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 14px; border: 0; border-radius: 7px; background: var(--surface); color: var(--ink-2); font-size: 14px; font-weight: 500; white-space: nowrap; transition: background .12s, color .12s; }
+.segmented button:hover { background: var(--hover); color: var(--ink); }
+.segmented button[aria-checked='true'] { background: var(--ink); color: var(--on-ink); }
+.segmented button[aria-checked='true']:hover { background: var(--ink); color: var(--on-ink); }
+.segmented button:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
+.segmented button .n { font-family: var(--font-mono); font-size: 12px; font-weight: 400; opacity: .7; }
 .ws-switch { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px 0 6px; border-radius: 999px; background: var(--surface); border: 1px solid var(--hair); font-size: 14.5px; font-weight: 500; position: relative; }
 .ws-switch .avatar { width: 24px; height: 24px; border-radius: 50%; font-size: 10px; }
 .search {
@@ -267,7 +270,6 @@ sup.ref, .ref { font-family: var(--font-mono); font-size: 10px; color: var(--ink
 .auth { display: grid; grid-template-columns: 1fr 1fr; min-height: 100vh; background: var(--surface); }
 .auth-left { display: flex; flex-direction: column; padding: 32px 66px 32px 66px; min-height: 100vh; }
 .auth-top { display: flex; align-items: center; justify-content: space-between; min-height: 40px; }
-.auth-top .brand { font-size: 20px; }
 .auth-mid { flex: 1; display: flex; flex-direction: column; justify-content: center; max-width: 440px; width: 100%; padding: 36px 0; }
 .auth-mid.top { justify-content: flex-start; padding-top: 70px; }
 .auth h1 { font-size: 36px; font-weight: 600; letter-spacing: -0.04em; line-height: 1.08; }
@@ -291,9 +293,6 @@ sup.ref, .ref { font-family: var(--font-mono); font-size: 10px; color: var(--ink
 .otp { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 18px; }
 .otp input { height: 60px; text-align: center; font-size: 24px; border-radius: 10px; border: 1px solid var(--hair); background: var(--surface); padding: 0; }
 .otp input:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 2px var(--ink); }
-.type-toggle { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border: 1px solid var(--hair); border-radius: 10px; margin-bottom: 18px; background: var(--surface); }
-.type-toggle button { height: 34px; border: 0; background: none; border-radius: 7px; font-size: 14px; color: var(--ink-2); text-align: left; padding: 0 14px; }
-.type-toggle button.on { background: var(--hover); color: var(--ink); font-weight: 500; }
 
 .auth-right { position: relative; overflow: hidden; background: #0a0a0a; color: #fff; display: flex; flex-direction: column; min-height: 100vh; }
 .auth-right::before { content: ''; position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px); background-size: 52px 52px; mask-image: radial-gradient(ellipse at 40% 25%, #000 25%, transparent 78%); }
@@ -323,7 +322,6 @@ sup.ref, .ref { font-family: var(--font-mono); font-size: 10px; color: var(--ink
 .ob { display: grid; grid-template-columns: 1fr 1fr; min-height: 100vh; background: var(--surface); }
 .ob-left { padding: 32px 66px 40px; display: flex; flex-direction: column; min-height: 100vh; max-width: 760px; width: 100%; justify-self: end; }
 .ob-top { display: flex; align-items: center; justify-content: space-between; }
-.ob-top .brand { font-size: 17px; }
 .steps { display: flex; flex-direction: column; gap: 17px; margin: 34px 0 40px; }
 .step { display: flex; align-items: center; gap: 12px; color: var(--ink-3); font-size: 14.5px; }
 .step .num { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; font-size: 12px; font-family: var(--font-mono); flex: none; }
@@ -472,8 +470,6 @@ sup.ref, .ref { font-family: var(--font-mono); font-size: 10px; color: var(--ink
 .ib-head .row { margin-bottom: 14px; }
 .ib-head h1 { font-size: 24px; letter-spacing: -0.03em; font-weight: 600; }
 .ib-head .select { width: 150px; height: 34px; font-size: 13px; }
-.ib-head .tabs { gap: 18px; }
-.ib-head .tabs button { font-size: 13.5px; }
 .ib-row { display: block; width: 100%; text-align: left; padding: 14px 16px 14px 14px; border: 0; border-bottom: 1px solid var(--hair); background: none; border-left: 2px solid transparent; }
 .ib-row:hover { background: var(--hover); }
 .ib-row.on { background: var(--hair-2); border-left-color: var(--ink); }
@@ -758,7 +754,6 @@ sup.ref, .ref { font-family: var(--font-mono); font-size: 10px; color: var(--ink
 /* ---------- Landing ---------- */
 .land { background: var(--ground); min-height: 100vh; }
 .land-nav { display: flex; align-items: center; gap: 28px; padding: 0 clamp(20px, 6vw, 80px); height: 66px; }
-.land-nav .brand { font-size: 17px; }
 .land-nav .links { display: flex; gap: 22px; font-size: 13.5px; color: var(--ink-2); }
 .land-nav .right { margin-left: auto; display: flex; align-items: center; gap: 16px; font-size: 13.5px; }
 .land-hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 56px; padding: 54px clamp(20px, 6vw, 80px) 100px; align-items: start; }
@@ -961,7 +956,6 @@ sup.ref, .ref { font-family: var(--font-mono); font-size: 10px; color: var(--ink
 .plain { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
 .mail-badge { width: 46px; height: 46px; border-radius: 12px; background: var(--approve-soft); color: var(--approve); display: grid; place-items: center; margin-bottom: 22px; }
 .otp input.bad { border-color: var(--destructive); }
-.type-toggle { margin-bottom: 18px; }
 .strength s1 { }
 .strength.s2 i:nth-child(-n+2) { background: #8f5200; }
 .float-card .av { background: var(--bg); color: var(--fg); }
@@ -1048,3 +1042,40 @@ sup.ref, .ref { font-family: var(--font-mono); font-size: 10px; color: var(--ink
 .notfound { min-height: 100vh; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 14px; max-width: 460px; margin: 0 auto; padding: 24px; }
 .notfound h1 { font-size: 34px; letter-spacing: -0.04em; margin: 18px 0 0; }
 .notfound p { color: var(--ink-2); margin: 0 0 8px; line-height: 1.55; }
+
+/* Short screens: the form sits at the top with room to breathe and the page scrolls normally.
+   Tall screens keep the form vertically centred. The dark pane never decides where the form goes. */
+@media (max-height: 820px) {
+  .auth-left { min-height: 0; padding-top: 24px; }
+  .auth-mid { flex: 0 0 auto; justify-content: flex-start; padding: 44px 0 36px; }
+  .auth-foot { margin-top: auto; }
+}
+
+/* ---------- Auth layout: exactly one screen tall ----------
+   The two columns fill the viewport. The dark panel is pinned and never scrolls; the left column
+   scrolls by itself only when the form is taller than the screen. */
+.auth { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; grid-template-rows: minmax(0, 1fr); }
+.auth-left { height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.auth-right { height: 100%; min-height: 0; overflow: hidden; }
+.auth-right .pane-pad { flex: 1 0 auto; }
+.auth-right .stats3 { flex: none; }
+
+/* Fit levels, set by useFit() in AuthPane.tsx. Each level includes the ones before it. */
+.auth-right:is([data-fit='1'], [data-fit='2'], [data-fit='3'], [data-fit='4']) .stats3 { display: none; }
+.auth-right:is([data-fit='2'], [data-fit='3'], [data-fit='4']) .pane-pad { padding-top: 36px; }
+.auth-right:is([data-fit='2'], [data-fit='3'], [data-fit='4']) .hero-h { font-size: 34px; margin-top: 12px; }
+.auth-right:is([data-fit='2'], [data-fit='3'], [data-fit='4']) .pane-stage { margin-top: 26px; padding-bottom: 96px; }
+.auth-right:is([data-fit='2'], [data-fit='3'], [data-fit='4']) :is(.fc-person, .fc-h) { padding-top: 12px; padding-bottom: 12px; }
+.auth-right:is([data-fit='2'], [data-fit='3'], [data-fit='4']) .fc-body { padding-top: 12px; padding-bottom: 14px; }
+.auth-right:is([data-fit='2'], [data-fit='3'], [data-fit='4']) .fc-draft { padding-top: 12px; padding-bottom: 14px; }
+.auth-right:is([data-fit='3'], [data-fit='4']) .pane-pad { padding-top: 24px; }
+.auth-right:is([data-fit='3'], [data-fit='4']) .hero-h { font-size: 29px; }
+.auth-right:is([data-fit='3'], [data-fit='4']) .pane-stage { zoom: 0.86; }
+.auth-right[data-fit='4'] .pane-stage { zoom: 0.74; padding-bottom: 0; }
+.auth-right[data-fit='4'] :is(.mini-stat, .works-with) { display: none; }
+
+/* Phones and narrow windows: the dark panel is hidden and the page scrolls normally. */
+@media (max-width: 900px) {
+  .auth { height: auto; min-height: 100vh; min-height: 100dvh; overflow: visible; }
+  .auth-left { height: auto; min-height: 100vh; min-height: 100dvh; overflow: visible; }
+}

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Icon } from '../components/Icons'
-import { Avatar, Field, Modal, ST_VAR, companyName, contactById, useTitle } from '../components/ui'
+import { Avatar, Field, Modal, ST_VAR, Segmented, companyName, contactById, useTitle } from '../components/ui'
 import { LIMITS, idOk, amountErr, clean, cleanMulti, dateErr, nameErr } from '../data/validate'
 import { addDeal, getState, moveDeal, toast, updateDeal, useStore, logAudit } from '../store'
 import { STAGES, money, stageLabel, type Currency, type Stage } from '../data/seed'
@@ -45,9 +45,8 @@ export function Pipeline() {
           </div>
         </div>
       </div>
-      <div className="tabs" style={{ marginBottom: 18 }}>
-        {(['open', 'won', 'lost'] as const).map((k) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{k[0].toUpperCase() + k.slice(1)}<span className="n">{k === 'open' ? open.length : filt.filter((d) => d.stage === k).length}</span></button>)}
-      </div>
+      <Segmented label="Deal status" style={{ marginBottom: 18 }} value={tab} onChange={setTab}
+        options={(['open', 'won', 'lost'] as const).map((k) => ({ value: k, label: k[0]!.toUpperCase() + k.slice(1), count: k === 'open' ? open.length : filt.filter((d) => d.stage === k).length }))} />
 
       {tab === 'open' ? (
         <>

@@ -45,3 +45,6 @@ export async function forceFill(loc: import('@playwright/test').Locator, value: 
     el.dispatchEvent(new Event('input', { bubbles: true }))
   }, value)
 }
+
+/** A person leaving a field: a key press inside it (Tab), which also moves focus on. Playwright's fill() and blur() alone are not user actions. */
+export async function leave(loc: import('@playwright/test').Locator) { await loc.press('Tab') }

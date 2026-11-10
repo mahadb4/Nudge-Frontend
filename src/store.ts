@@ -23,7 +23,7 @@ export interface State {
 const isTheme = (v: unknown): v is Theme => v === 'light' || v === 'dark' || v === 'system'
 const savedTheme: Theme = (() => { try { const t = localStorage.getItem('nudge.theme'); return isTheme(t) ? t : 'light' } catch { return 'light' } })()
 
-export type User = { name: string; email: string; type: 'Individual' | 'Business'; verified: boolean }
+export type User = { name: string; email: string; type: 'individual' | 'business'; verified: boolean }
 
 const defaultSettings = (theme: Theme): Settings => ({
   theme, mode: 'draft', approvals: 32, threshold: 85, quietOn: true, quietFrom: '8:00 PM', quietTo: '8:00 AM', tz: 'Asia/Karachi',

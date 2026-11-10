@@ -10,5 +10,5 @@ export default defineConfig({
   workers: 4,
   reporter: [['list']],
   use: { baseURL: 'http://localhost:4173', channel: 'chrome', headless: true, viewport: { width: 1400, height: 900 }, acceptDownloads: true },
-  webServer: { command: 'npm run build && npx vite preview --port 4173 --strictPort', url: 'http://localhost:4173', reuseExistingServer: true, timeout: 120_000 },
+  webServer: { command: 'npm run build && npx vite preview --port 4173 --strictPort', url: 'http://localhost:4173', reuseExistingServer: true, timeout: 120_000, env: { VITE_USE_MOCK_API: 'true' } },
 });

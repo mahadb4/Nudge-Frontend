@@ -3,7 +3,7 @@ import { NavLink, Navigate, useParams } from 'react-router-dom'
 import { Icon, GoogleG, MsLogo } from '../components/Icons'
 import { Avatar, Field, Modal, ReplyMark, Toggle, downloadCSV, emailOk, pwScore, useTitle } from '../components/ui'
 import { LIMITS, clean, emailErr, nameErr, normEmail, passwordErr, personErr, phoneErr, textErr } from '../data/validate'
-import { api, apiMessage } from '../api'
+import { api, apiMessage, fieldMessages } from '../api'
 import { useSubmit } from '../components/guards'
 import { logAudit, nid, patch, setSettings, setTheme, toast, useStore } from '../store'
 import { REPLY_TYPES, type Fact, type Member } from '../data/seed'
@@ -63,11 +63,12 @@ function Profile() {
 
 function Security() {
   const twoFA = useStore((s) => s.settings.twoFA)
+  const user = useStore((s) => s.user)
   const { busy, run } = useSubmit()
   const [cur, setCur] = useState(''); const [pw, setPw] = useState(''); const [pw2, setPw2] = useState(''); const [show, setShow] = useState(false); const [tried, setTried] = useState(false)
   const [sessions, setSessions] = useState([{ id: 1, d: 'Chrome on Windows', m: 'Karachi, PK · This device · Active now', me: true }, { id: 2, d: 'Safari on iPhone', m: 'Karachi, PK · 2 hours ago', me: false }, { id: 3, d: 'Chrome on macOS', m: 'Lahore, PK · 6 days ago', me: false }])
   const sc = pwScore(pw)
-  const e = { cur: !cur ? 'Enter your current password.' : cur.length > LIMITS.password ? 'That password is too long.' : '', pw: passwordErr(pw, { email: 'mahad@acme.co', name: 'Mahad Baig' }) || (pw === cur ? 'Choose a password you have not used here.' : ''), pw2: !pw2 ? 'Confirm your new password.' : pw2 !== pw ? 'Passwords do not match.' : '' }
+  const e = { cur: !cur ? 'Enter your current password.' : cur.length > LIMITS.password ? 'That password is too long.' : '', pw: passwordErr(pw, { email: user?.email ?? '', name: user?.name ?? '' }) || (pw === cur ? 'Choose a password you have not used here.' : ''), pw2: !pw2 ? 'Confirm your new password.' : pw2 !== pw ? 'Passwords do not match.' : '' }
   return (<>
     <div className="card set-card"><Head t="Password" d="Use a long password you do not use anywhere else." />
       <div className="form-stack" style={{ maxWidth: 440 }}>
@@ -76,7 +77,7 @@ function Security() {
         <Field label="Confirm new password" error={tried ? e.pw2 : ''}><input className={'input' + (tried && e.pw2 ? ' invalid' : '')} type={show ? 'text' : 'password'} autoComplete="new-password" maxLength={LIMITS.password} value={pw2} onChange={(x) => setPw2(x.target.value)} /></Field>
         <label className="row" style={{ fontSize: 13.5 }}><input type="checkbox" className="check" checked={show} onChange={(x) => setShow(x.target.checked)} />Show passwords</label>
       </div>
-      <div className="actions-end"><button className="btn primary" disabled={busy} onClick={() => { setTried(true); if (e.cur || e.pw || e.pw2) return; void run(async () => { try { await api.auth.changePassword({ current: cur, password: pw }); setCur(''); setPw(''); setPw2(''); setTried(false); logAudit('Changed password', 'Account'); toast('Password updated') } catch (err) { toast(apiMessage(err)) } }) }}>{busy ? 'Updating…' : 'Update password'}</button></div></div>
+      <div className="actions-end"><button className="btn primary" disabled={busy} onClick={() => { setTried(true); if (e.cur || e.pw || e.pw2) return; void run(async () => { try { await api.auth.changePassword({ current: cur, password: pw }); setCur(''); setPw(''); setPw2(''); setTried(false); logAudit('Changed password', 'Account'); toast('Password updated') } catch (err) { const f = fieldMessages(err); toast(f.current ?? f.password ?? apiMessage(err)) } }) }}>{busy ? 'Updating…' : 'Update password'}</button></div></div>
     <div className="card set-card"><Head t="Two-step sign-in" d="Ask for a 6-digit code from your authenticator app at sign-in." />
       <div className="set-row" style={{ borderTop: 0, paddingBottom: 0 }}><div className="grow"><b>Authenticator app <span className={'tag ' + (twoFA ? 'green' : 'grey')}>{twoFA ? 'On' : 'Off'}</span></b></div><Toggle on={twoFA} label="Two-step sign-in" onChange={(v) => { setSettings({ twoFA: v }); toast(v ? 'Two-step sign-in is on' : 'Two-step sign-in is off') }} /></div></div>
     <div className="card set-card"><Head t="Active sessions" />

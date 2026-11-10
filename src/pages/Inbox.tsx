@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Icon } from '../components/Icons'
-import { Avatar, Conf, ReplyMark, companyName, contactById, useTitle } from '../components/ui'
+import { Avatar, Conf, ReplyMark, Segmented, companyName, contactById, useTitle } from '../components/ui'
 import { setState, useStore } from '../store'
 
 export function Inbox() {
@@ -28,9 +28,8 @@ export function Inbox() {
               <option value="all">All mailboxes</option>{mailboxes.filter((m) => m.status === 'ok').map((m) => <option key={m.id}>{m.email}</option>)}
             </select>
           </div>
-          <div className="tabs">
-            {(['all', 'waiting', 'done'] as const).map((k) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{k === 'all' ? 'All' : k === 'waiting' ? 'Waiting' : 'Replied'}<span className="n">{cnt(k)}</span></button>)}
-          </div>
+          <Segmented label="Thread status" value={tab} onChange={setTab}
+            options={(['all', 'waiting', 'done'] as const).map((k) => ({ value: k, label: k === 'all' ? 'All' : k === 'waiting' ? 'Waiting' : 'Replied', count: cnt(k) }))} />
         </div>
         {list.length === 0 && <div className="empty">Nothing here.</div>}
         {list.map((t) => {

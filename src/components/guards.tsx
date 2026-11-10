@@ -26,7 +26,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (user) { setChecked(true); return }
     let live = true
-    api.auth.me().then((u) => { if (live && u) hydrateWorkspace(u) }).catch(() => { /* treated as signed out */ }).finally(() => { if (live) setChecked(true) })
+    api.auth.restore().then((u) => { if (live && u) hydrateWorkspace(u) }).catch(() => { /* treated as signed out */ }).finally(() => { if (live) setChecked(true) })
     return () => { live = false }
   }, [user])
   if (!checked) return <div className="boot" role="status" aria-label="Loading" />

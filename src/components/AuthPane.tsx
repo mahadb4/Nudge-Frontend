@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, type RefObject } from 'react'
 import { GoogleG, Icon, MsLogo } from './Icons'
 
 export type Pane = 'reply' | 'start' | 'security'
@@ -74,10 +75,34 @@ function SecurityCard() {
   )
 }
 
+/** The panel is exactly one screen tall and never scrolls. If its content is taller, add fit levels until it
+    fits: 1 hides the stats row, 2 tightens spacing, 3 scales the cards, 4 drops the floating cards too.
+    The main card always stays whole. The levels live in app.css under [data-fit]. */
+function useFit(ref: RefObject<HTMLDivElement | null>, deps: readonly unknown[]) {
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const run = () => {
+      for (let level = 0; level <= 4; level++) {
+        el.dataset.fit = String(level)
+        if (el.scrollHeight <= el.clientHeight + 1) return
+      }
+    }
+    run()
+    const ro = new ResizeObserver(run)
+    ro.observe(el)
+    void document.fonts?.ready.then(run)
+    return () => ro.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps)
+}
+
 export function RightPane({ pane = 'reply', done = 1 }: { pane?: Pane; done?: number }) {
   const t = PANES[pane]
+  const ref = useRef<HTMLDivElement>(null)
+  useFit(ref, [pane, done])
   return (
-    <div className="auth-right">
+    <div className="auth-right" ref={ref}>
       <div className="pane-pad">
         <div className="kicker">{t.kicker}</div>
         <h2 className="hero-h">{t.a} <span>{t.b}</span></h2>

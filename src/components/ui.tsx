@@ -11,6 +11,34 @@ export function Avatar({ name, tint = 't-grey', size = '' }: { name: string; tin
   return <span className={`avatar ${size} ${tint}`}>{initials(name)}</span>
 }
 
+/** The one segmented control, for toggles and tab groups. Arrow keys move the choice, Tab leaves the group.
+    Styles are `.segmented` in app.css: selected is near-black with white text, the rest white with gray text. */
+export function Segmented<T extends string | number>({ value, options, onChange, label, block, style }: {
+  value: T; options: ReadonlyArray<{ value: T; label: ReactNode; count?: number }>; onChange: (v: T) => void
+  label: string; block?: boolean; style?: React.CSSProperties
+}) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([])
+  const has = options.some((o) => o.value === value)
+  const go = (i: number) => { const n = (i + options.length) % options.length; onChange(options[n]!.value); refs.current[n]?.focus() }
+  return (
+    <div className={'segmented' + (block ? ' block' : '')} role="radiogroup" aria-label={label} style={style}>
+      {options.map((o, i) => {
+        const on = o.value === value
+        return (
+          <button key={String(o.value)} ref={(el) => { refs.current[i] = el }} type="button" role="radio" aria-checked={on} tabIndex={on || (!has && i === 0) ? 0 : -1}
+            onClick={() => onChange(o.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); go(i + 1) }
+              else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); go(i - 1) }
+            }}>
+            {o.label}{o.count !== undefined && <span className="n">{o.count}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export const RT_VAR: Record<ReplyType, string> = {
   meeting: 'var(--rt-meeting)', pricing: 'var(--rt-pricing)', objection: 'var(--rt-objection)', defer: 'var(--rt-defer)', referral: 'var(--rt-referral)',
   notinterested: 'var(--rt-notinterested)', optout: 'var(--rt-optout)', ooo: 'var(--rt-ooo)', unclear: 'var(--rt-unclear)',

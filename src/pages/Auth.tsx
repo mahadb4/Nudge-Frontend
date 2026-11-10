@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { api, ApiError, apiMessage } from '../api'
+import { api, ApiError, apiMessage, browserTimeZone, Code, fieldMessages, isMock } from '../api'
+import { messageFor } from '../api/errors'
 import { Brand, GoogleG, Icon, MsLogo } from '../components/Icons'
 import { RightPane, type Pane } from '../components/AuthPane'
 import { useSubmit } from '../components/guards'
-import { Field, useTitle } from '../components/ui'
+import { Field, Segmented, useTitle } from '../components/ui'
 import { LIMITS, emailErr, emailOk, nameErr, normEmail, passwordErr, personErr, pwScore, safeInternalPath } from '../data/validate'
 import { hydrateWorkspace, toast, type User } from '../store'
 
@@ -12,11 +13,10 @@ import { hydrateWorkspace, toast, type User } from '../store'
    rate-limits login, verify and reset on its own and answers 429. */
 const UI_MAX_TRIES = 5
 const UI_LOCK_MS = 30_000
+const RESEND_SECONDS = 30
 
 type RouterState = { from?: string; notice?: string; email?: string; token?: string } | null
 const useRouterState = () => (useLocation().state as RouterState) ?? {}
-
-const GENERIC_LOGIN_ERROR = 'That email and password do not match.'
 
 function AuthFrame({ top, children, pane = 'reply', done }: { top?: ReactNode; children: ReactNode; pane?: Pane; done?: number }) {
   return (
@@ -44,11 +44,27 @@ function Providers({ verb, onUser, onError, busy, run }: { verb: string; onUser:
   )
 }
 
+/** A field is "left" only when the person used it (a key, a click or a paste) and then moved away.
+    Autofill, and an autofocus that loses focus on its own, never count, so no error shows on first load. */
+function useTouched() {
+  const [touched, setTouched] = useState<Record<string, boolean>>({})
+  const used = useRef<Record<string, boolean>>({})
+  const field = (k: string, after?: () => void) => {
+    const mark = () => { used.current[k] = true }
+    return {
+      onKeyDown: mark, onPointerDown: mark, onPaste: mark,
+      onBlur: () => { if (used.current[k]) setTouched((t) => (t[k] ? t : { ...t, [k]: true })); after?.() },
+    }
+  }
+  return { touched, field }
+}
+type Bind = ReturnType<ReturnType<typeof useTouched>['field']>
+
 /** The password is sent exactly as typed. It is never trimmed, lowercased, logged or kept. */
-function PwInput({ value, onChange, onBlur, invalid, placeholder, id, mode }: { value: string; onChange: (v: string) => void; onBlur?: () => void; invalid?: boolean; placeholder?: string; id?: string; mode: 'current-password' | 'new-password' }) {
+function PwInput({ value, onChange, bind, invalid, placeholder, id, mode }: { value: string; onChange: (v: string) => void; bind?: Bind; invalid?: boolean; placeholder?: string; id?: string; mode: 'current-password' | 'new-password' }) {
   const [show, setShow] = useState(false)
   return (
-    <div className="pw"><input id={id} className={'input' + (invalid ? ' invalid' : '')} type={show ? 'text' : 'password'} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} onBlur={onBlur}
+    <div className="pw"><input id={id} className={'input' + (invalid ? ' invalid' : '')} type={show ? 'text' : 'password'} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} {...bind}
       autoComplete={mode} autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={LIMITS.password} />
       <button type="button" aria-label={show ? 'Hide password' : 'Show password'} onClick={() => setShow(!show)}><Icon n={show ? 'eyeOff' : 'eye'} s={18} /></button></div>
   )
@@ -63,7 +79,7 @@ export function SignIn() {
   const dest = safeInternalPath(rs.from, '/app/home')
   const { busy, run } = useSubmit()
   const [email, setEmail] = useState(''); const [pw, setPw] = useState(''); const [keep, setKeep] = useState(true)
-  const [tried, setTried] = useState(false); const [touched, setTouched] = useState({ email: false, pw: false })
+  const [tried, setTried] = useState(false); const { touched, field } = useTouched()
   const [fails, setFails] = useState(0); const [lockedUntil, setLockedUntil] = useState(0); const [now, setNow] = useState(Date.now())
   const [msg, setMsg] = useState('')
   useEffect(() => { if (lockedUntil <= Date.now()) return; const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t) }, [lockedUntil])
@@ -71,16 +87,21 @@ export function SignIn() {
   const e = { email: emailErr(email), pw: !pw ? 'Enter your password.' : pw.length > LIMITS.password ? 'That password is too long.' : '' }
   const show = (k: 'email' | 'pw') => (tried || touched[k] ? e[k] : '')
   const enter = (u: User) => { hydrateWorkspace(u); nav(dest, { replace: true }) }
-  const lock = () => { setLockedUntil(Date.now() + UI_LOCK_MS); setNow(Date.now()); setFails(0) }
+  const lock = (ms = UI_LOCK_MS) => { setLockedUntil(Date.now() + ms); setNow(Date.now()); setFails(0) }
   const submit = (ev: React.FormEvent) => {
     ev.preventDefault(); setTried(true); setMsg('')
     if (wait > 0 || e.email || e.pw) return
     void run(async () => {
       try { enter(await api.auth.login({ email, password: pw, remember: keep })) }
       catch (err) {
-        if (err instanceof ApiError && err.code === 'rate_limited') { lock(); setMsg(err.message); return }
+        if (err instanceof ApiError && err.apiCode === Code.EMAIL_UNVERIFIED) {
+          // The password was right but the email is not verified: send a fresh code and go to the code screen.
+          try { await api.auth.resendCode(email) } catch { /* the code screen has its own resend */ }
+          nav('/verify', { state: { email: normEmail(email) } }); return
+        }
+        if (err instanceof ApiError && err.code === 'rate_limited') { lock(err.retryAfter ? err.retryAfter * 1000 : UI_LOCK_MS); setMsg(err.message); return }
         const n = fails + 1; setFails(n); if (n >= UI_MAX_TRIES) lock()
-        setMsg(err instanceof ApiError && err.code === 'bad_credentials' ? GENERIC_LOGIN_ERROR : apiMessage(err))
+        setMsg(apiMessage(err))
       }
     })
   }
@@ -88,19 +109,17 @@ export function SignIn() {
     <AuthFrame top={<Link className="btn" to="/sign-up">Create an account</Link>}>
       <h1>Welcome back</h1><p className="lead">Sign in to your Nudge workspace.</p>
       {rs.notice === 'expired' && <div className="callout amber" role="status" style={{ marginBottom: 14 }}><i className="dot round" />Your session ended. Sign in again.</div>}
-      <Providers verb="Continue" onUser={enter} onError={setMsg} busy={busy} run={run} />
-      <div className="or">OR</div>
+      {isMock && <><Providers verb="Continue" onUser={enter} onError={setMsg} busy={busy} run={run} /><div className="or">OR</div></>}
       <form onSubmit={submit} noValidate>
         {wait > 0 ? <div className="callout amber" role="alert" style={{ marginBottom: 14 }}><i className="dot round" />Too many attempts. Try again in {wait} seconds.</div>
           : msg && <div className="callout amber" role="alert" style={{ marginBottom: 14 }}><i className="dot round" />{msg}</div>}
-        <Field label="Work email" error={show('email')}><input className={'input' + (show('email') ? ' invalid' : '')} {...emailAttrs} autoComplete="username" value={email} onChange={(x) => setEmail(x.target.value)} onBlur={() => { setTouched((t) => ({ ...t, email: true })); setEmail((v) => normEmail(v)) }} placeholder="name@company.com" autoFocus /></Field>
+        <Field label="Work email" error={show('email')}><input className={'input' + (show('email') ? ' invalid' : '')} {...emailAttrs} autoComplete="username" value={email} onChange={(x) => setEmail(x.target.value)} {...field('email', () => setEmail((v) => normEmail(v)))} placeholder="name@company.com" autoFocus /></Field>
         <Field label="Password" error={show('pw')}>
           <Link className="link field-aside" to="/reset">Forgot password?</Link>
-          <PwInput mode="current-password" value={pw} onChange={setPw} onBlur={() => setTouched((t) => ({ ...t, pw: true }))} invalid={!!show('pw')} />
+          <PwInput mode="current-password" value={pw} onChange={setPw} bind={field('pw')} invalid={!!show('pw')} />
         </Field>
         <label className="row" style={{ margin: '4px 0 18px', fontSize: 13.5 }}><input type="checkbox" className="check" checked={keep} onChange={(x) => setKeep(x.target.checked)} />Keep me signed in <span className="muted">for 30 days</span></label>
         <button className="btn primary xl" type="submit" disabled={wait > 0 || busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
-        <p className="muted demo">Demo workspace <span className="mono">mahad@acme.com · Nudge2026</span></p>
       </form>
     </AuthFrame>
   )
@@ -110,48 +129,52 @@ export function SignUp() {
   useTitle('Create account')
   const nav = useNavigate()
   const { busy, run } = useSubmit()
-  const [type, setType] = useState<'Individual' | 'Business'>('Business')
+  const [type, setType] = useState<'individual' | 'business'>('business')
   const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [pw, setPw] = useState(''); const [co, setCo] = useState('')
-  const [tried, setTried] = useState(false); const [touched, setTouched] = useState<Record<string, boolean>>({}); const [msg, setMsg] = useState('')
+  const [tried, setTried] = useState(false); const { touched, field } = useTouched(); const [msg, setMsg] = useState('')
+  /* Field errors the server found, keyed by our field names. Cleared as soon as the person edits the form. */
+  const [srv, setSrv] = useState<Record<string, string>>({})
   const sc = pwScore(pw)
   const e = {
     name: personErr(name), email: emailErr(email),
-    pw: passwordErr(pw, { email, name }), co: type === 'Business' ? nameErr(co, 'company name', 2, LIMITS.company) : '',
+    pw: passwordErr(pw, { email, name }), co: type === 'business' ? nameErr(co, 'company name', 2, LIMITS.company) : '',
   }
-  const show = (k: keyof typeof e) => (tried || touched[k] ? e[k] : '')
-  const touch = (k: string) => setTouched((t) => ({ ...t, [k]: true }))
+  const show = (k: keyof typeof e) => (tried || touched[k] ? e[k] : '') || srv[k] || ''
   const bad = Object.values(e).some(Boolean)
   const label = ['Use 8 or more characters', 'Weak', 'Fair', 'Good', 'Strong'][sc]
   const tip = sc === 2 ? 'add a symbol to make it strong' : sc === 1 ? 'add numbers and capitals' : ''
   const submit = (ev: React.FormEvent) => {
-    ev.preventDefault(); setTried(true); setMsg('')
+    ev.preventDefault(); setTried(true); setMsg(''); setSrv({})
     if (bad) return
     void run(async () => {
       try {
-        await api.auth.register({ name: name.trim(), company: type === 'Business' ? co.trim() : undefined, email: normEmail(email), password: pw, type })
+        await api.auth.register({ name: name.trim(), company: type === 'business' ? co.trim() : undefined, email: normEmail(email), password: pw, type })
         nav('/verify', { state: { email: normEmail(email) } })
-      } catch (err) { setMsg(apiMessage(err)) }
+      } catch (err) {
+        const f = fieldMessages(err)
+        setSrv({ name: f.name ?? '', co: f.company ?? '', email: f.email ?? '', pw: f.password ?? '' })
+        setMsg(apiMessage(err))
+      }
     })
   }
   return (
     <AuthFrame pane="start" done={1} top={<>Have an account? <Link className="link" to="/sign-in">Sign in</Link></>}>
       <h1>Create your workspace</h1><p className="lead">Free for 14 days. No card needed.</p>
-      <Providers verb="Sign up" onUser={(u) => { hydrateWorkspace(u); nav('/onboarding/1') }} onError={setMsg} busy={busy} run={run} />
-      <div className="or">OR</div>
-      <div className="type-toggle" role="radiogroup">{(['Individual', 'Business'] as const).map((t) => <button key={t} type="button" role="radio" aria-checked={type === t} className={type === t ? 'on' : ''} onClick={() => setType(t)}>{t === 'Business' ? 'Business team' : t}</button>)}</div>
-      <form noValidate onSubmit={submit}>
+      {isMock && <><Providers verb="Sign up" onUser={(u) => { hydrateWorkspace(u); nav('/onboarding/1') }} onError={setMsg} busy={busy} run={run} /><div className="or">OR</div></>}
+      <Segmented block label="Account type" style={{ marginBottom: 18 }} value={type} onChange={setType} options={[{ value: 'individual', label: 'Individual' }, { value: 'business', label: 'Business team' }]} />
+      <form noValidate onSubmit={submit} onChange={() => setSrv((s) => (Object.keys(s).length ? {} : s))}>
         {msg && <div className="callout amber" role="alert" style={{ marginBottom: 14 }}><i className="dot round" />{msg}</div>}
-        <div className={type === 'Business' ? 'two' : ''}>
-          <Field label="Full name" error={show('name')}><input className={'input' + (show('name') ? ' invalid' : '')} maxLength={LIMITS.name} autoComplete="name" autoCapitalize="words" spellCheck={false} value={name} onChange={(x) => setName(x.target.value)} onBlur={() => { touch('name'); setName((v) => v.replace(/\s+/g, ' ').trim()) }} autoFocus /></Field>
-          {type === 'Business' && <Field label="Company" error={show('co')}><input className={'input' + (show('co') ? ' invalid' : '')} maxLength={LIMITS.company} autoComplete="organization" autoCapitalize="words" spellCheck={false} value={co} onChange={(x) => setCo(x.target.value)} onBlur={() => { touch('co'); setCo((v) => v.replace(/\s+/g, ' ').trim()) }} /></Field>}
+        <div className={type === 'business' ? 'two' : ''}>
+          <Field label="Full name" error={show('name')}><input className={'input' + (show('name') ? ' invalid' : '')} maxLength={LIMITS.name} autoComplete="name" autoCapitalize="words" spellCheck={false} value={name} onChange={(x) => setName(x.target.value)} {...field('name', () => setName((v) => v.replace(/\s+/g, ' ').trim()))} autoFocus /></Field>
+          {type === 'business' && <Field label="Company" error={show('co')}><input className={'input' + (show('co') ? ' invalid' : '')} maxLength={LIMITS.company} autoComplete="organization" autoCapitalize="words" spellCheck={false} value={co} onChange={(x) => setCo(x.target.value)} {...field('co', () => setCo((v) => v.replace(/\s+/g, ' ').trim()))} /></Field>}
         </div>
-        <Field label="Work email" error={show('email')}><input className={'input' + (show('email') ? ' invalid' : '')} {...emailAttrs} autoComplete="email" value={email} onChange={(x) => setEmail(x.target.value)} onBlur={() => { touch('email'); setEmail((v) => normEmail(v)) }} placeholder="name@company.com" /></Field>
+        <Field label="Work email" error={show('email')}><input className={'input' + (show('email') ? ' invalid' : '')} {...emailAttrs} autoComplete="email" value={email} onChange={(x) => setEmail(x.target.value)} {...field('email', () => setEmail((v) => normEmail(v)))} placeholder="name@company.com" /></Field>
         <Field label="Password" error={show('pw')}>
-          <PwInput mode="new-password" value={pw} onChange={setPw} onBlur={() => touch('pw')} invalid={!!show('pw')} />
+          <PwInput mode="new-password" value={pw} onChange={setPw} bind={field('pw')} invalid={!!show('pw')} />
           <div className={'strength s' + sc}><i /><i /><i /><i /></div>
           <span className="hint"><b className={'sc s' + sc}>{pw ? label : ''}</b> {pw ? (e.pw && !tried ? e.pw : tip) : label}</span>
         </Field>
-        <p className="muted tz">Time zone <span className="mono">{Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Karachi'}</span>, from your browser. <span className="link">Change</span></p>
+        <p className="muted tz">Time zone <span className="mono">{browserTimeZone()}</span>, from your browser. <span className="link">Change</span></p>
         <button className="btn primary xl" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
         <p className="muted terms">By continuing you agree to the <a className="link" href="#" onClick={(x) => x.preventDefault()}>Terms</a> and <a className="link" href="#" onClick={(x) => x.preventDefault()}>Privacy Policy</a>.</p>
       </form>
@@ -167,7 +190,7 @@ export function Verify() {
   /* The address comes from router state, not the URL, so it is not in history, logs or Referer headers.
      It is checked before it is shown, and it is never rendered as anything but text. */
   const email = typeof rs.email === 'string' && emailOk(rs.email) ? normEmail(rs.email) : ''
-  const [d, setD] = useState<string[]>(Array(6).fill('')); const [err, setErr] = useState(''); const [left, setLeft] = useState(42)
+  const [d, setD] = useState<string[]>(Array(6).fill('')); const [err, setErr] = useState(''); const [left, setLeft] = useState(RESEND_SECONDS)
   const [tries, setTries] = useState(0); const [serverLocked, setServerLocked] = useState(false)
   const refs = useRef<(HTMLInputElement | null)[]>([])
   useEffect(() => { if (left <= 0) return; const t = setTimeout(() => setLeft(left - 1), 1000); return () => clearTimeout(t) }, [left])
@@ -188,13 +211,17 @@ export function Verify() {
       try { hydrateWorkspace(await api.auth.verifyEmail({ email, code: c })); nav('/onboarding/1', { replace: true }) }
       catch (e) {
         setD(Array(6).fill('')); refs.current[0]?.focus()
-        if (e instanceof ApiError && e.code === 'rate_limited') { setServerLocked(true); setErr('Too many wrong codes. Send a new code to try again.'); return }
+        if (e instanceof ApiError && e.apiCode === Code.CODE_ATTEMPTS_EXCEEDED) { setServerLocked(true); setErr(e.message); return }
+        if (e instanceof ApiError && e.code === 'rate_limited') { setErr(e.message); return }
         const n = tries + 1; setTries(n)
-        setErr(n >= UI_MAX_TRIES ? 'Too many wrong codes. Send a new code to try again.' : e instanceof ApiError && e.code === 'invalid_code' ? e.message : apiMessage(e))
+        setErr(n >= UI_MAX_TRIES ? messageFor(Code.CODE_ATTEMPTS_EXCEEDED, 429) : apiMessage(e))
       }
     })
   }
-  const resend = () => void run(async () => { await api.auth.resendCode(email); setLeft(42); setTries(0); setServerLocked(false); setD(Array(6).fill('')); setErr(''); toast('A new code was sent') })
+  const resend = () => void run(async () => {
+    try { await api.auth.resendCode(email); setLeft(RESEND_SECONDS); setTries(0); setServerLocked(false); setD(Array(6).fill('')); setErr(''); toast('A new code was sent') }
+    catch (e) { setErr(apiMessage(e)); if (e instanceof ApiError && e.retryAfter) setLeft(e.retryAfter) }
+  })
   return (
     <AuthFrame pane="start" done={1} top={<>Have an account? <Link className="link" to="/sign-in">Sign in</Link></>}>
       <div className="mail-badge"><Icon n="mail" s={20} /></div>
@@ -206,7 +233,7 @@ export function Verify() {
       <button className="btn primary xl" onClick={submit} disabled={locked || busy}>{busy ? 'Checking…' : 'Verify email'}</button>
       <p className="muted small" style={{ marginTop: 18 }}>Didn’t get it? Check spam, or {left > 0 && !locked ? <>send a new code in <span className="mono">0:{String(left).padStart(2, '0')}</span></> : <button className="link plain" onClick={resend} disabled={busy}>send a new code</button>}</p>
       <p className="muted small">Wrong email? <Link className="link" to="/sign-up">Go back</Link></p>
-      <p className="muted small" style={{ marginTop: 14 }}>Demo code <button className="plain mono" onClick={() => setD('246810'.split(''))}>246810</button></p>
+      {isMock && <p className="muted small" style={{ marginTop: 14 }}>Demo code <button className="plain mono" onClick={() => setD('246810'.split(''))}>246810</button></p>}
     </AuthFrame>
   )
 }
@@ -215,7 +242,7 @@ export function Reset() {
   useTitle('Reset password')
   const nav = useNavigate()
   const { busy, run } = useSubmit()
-  const [email, setEmail] = useState(''); const [sent, setSent] = useState(false); const [tried, setTried] = useState(false); const [touched, setTouched] = useState(false)
+  const [email, setEmail] = useState(''); const [sent, setSent] = useState(false); const [tried, setTried] = useState(false); const { touched, field } = useTouched()
   const [demoToken, setDemoToken] = useState(''); const [msg, setMsg] = useState('')
   const err = emailErr(email)
   const submit = (ev: React.FormEvent) => {
@@ -231,7 +258,7 @@ export function Reset() {
       <h1>Reset your password</h1><p className="lead">Enter your work email and we’ll send you a reset link.</p>
       <form noValidate onSubmit={submit}>
         {msg && <div className="callout amber" role="alert" style={{ marginBottom: 14 }}><i className="dot round" />{msg}</div>}
-        <Field label="Work email" error={tried || touched ? err : ''}><input className={'input' + ((tried || touched) && err ? ' invalid' : '')} {...emailAttrs} autoComplete="email" value={email} onChange={(x) => { setEmail(x.target.value); setSent(false) }} onBlur={() => { setTouched(true); setEmail((v) => normEmail(v)) }} placeholder="name@company.com" autoFocus /></Field>
+        <Field label="Work email" error={tried || touched.email ? err : ''}><input className={'input' + ((tried || touched.email) && err ? ' invalid' : '')} {...emailAttrs} autoComplete="email" value={email} onChange={(x) => { setEmail(x.target.value); setSent(false) }} {...field('email', () => setEmail((v) => normEmail(v)))} placeholder="name@company.com" autoFocus /></Field>
         <button className="btn primary xl" type="submit" style={{ marginTop: 6 }} disabled={busy}>{busy ? 'Sending…' : 'Send reset link'}</button>
       </form>
       {/* The same words for every address, so this page cannot be used to find out who has an account. */}
@@ -254,22 +281,26 @@ export function NewPassword() {
   const token = typeof rs.token === 'string' && TOKEN_OK.test(rs.token) ? rs.token : TOKEN_OK.test(urlToken) ? urlToken : ''
   const who = typeof rs.email === 'string' && emailOk(rs.email) ? normEmail(rs.email) : ''
   useEffect(() => { if (urlToken) nav('/new-password', { replace: true, state: { token: TOKEN_OK.test(urlToken) ? urlToken : '' } }) }, [urlToken, nav])
-  const [pw, setPw] = useState(''); const [pw2, setPw2] = useState(''); const [tried, setTried] = useState(false); const [touched, setTouched] = useState<Record<string, boolean>>({}); const [msg, setMsg] = useState('')
+  const [pw, setPw] = useState(''); const [pw2, setPw2] = useState(''); const [tried, setTried] = useState(false); const { touched, field } = useTouched(); const [msg, setMsg] = useState('')
+  const [dead, setDead] = useState(false); const [srvPw, setSrvPw] = useState('')
   const sc = pwScore(pw)
   const e = { pw: passwordErr(pw, { email: who }), pw2: !pw2 ? 'Confirm your new password.' : pw2 !== pw ? 'Passwords do not match.' : '' }
-  const show = (k: 'pw' | 'pw2') => (tried || touched[k] ? e[k] : '')
-  if (!token) return (
+  const show = (k: 'pw' | 'pw2') => (tried || touched[k] ? e[k] : '') || (k === 'pw' ? srvPw : '')
+  if (!token || dead) return (
     <AuthFrame pane="security" top={<Link className="btn" to="/sign-in">Sign in</Link>}>
       <h1>This link is not valid</h1><p className="lead">Reset links work once and expire in an hour. Ask for a new one.</p>
       <Link className="btn primary xl" to="/reset">Send a new link</Link>
     </AuthFrame>
   )
   const submit = (ev: React.FormEvent) => {
-    ev.preventDefault(); setTried(true); setMsg('')
+    ev.preventDefault(); setTried(true); setMsg(''); setSrvPw('')
     if (e.pw || e.pw2) return
     void run(async () => {
       try { await api.auth.resetPassword({ token, password: pw }); toast('Password updated. Sign in with it.'); nav('/sign-in', { replace: true }) }
-      catch (err) { setMsg(apiMessage(err)) }
+      catch (err) {
+        if (err instanceof ApiError && err.apiCode === Code.INVALID_TOKEN) { setDead(true); return }
+        setSrvPw(fieldMessages(err).password ?? ''); setMsg(apiMessage(err))
+      }
     })
   }
   return (
@@ -277,8 +308,8 @@ export function NewPassword() {
       <h1>Choose a new password</h1><p className="lead">For <span className="mono">{who || 'your account'}</span>. You’ll be signed out on your other devices.</p>
       <form noValidate onSubmit={submit}>
         {msg && <div className="callout amber" role="alert" style={{ marginBottom: 14 }}><i className="dot round" />{msg} <Link className="link" to="/reset">Send a new link</Link></div>}
-        <Field label="New password" error={show('pw')}><PwInput mode="new-password" value={pw} onChange={setPw} onBlur={() => setTouched((t) => ({ ...t, pw: true }))} invalid={!!show('pw')} /><div className={'strength s' + sc}><i /><i /><i /><i /></div><span className="hint"><b className={'sc s' + sc}>{pw ? ['', 'Weak', 'Fair', 'Good', 'Strong'][sc] : ''}</b></span></Field>
-        <Field label="Confirm new password" error={show('pw2')}><PwInput mode="new-password" value={pw2} onChange={setPw2} onBlur={() => setTouched((t) => ({ ...t, pw2: true }))} invalid={!!show('pw2')} /></Field>
+        <Field label="New password" error={show('pw')}><PwInput mode="new-password" value={pw} onChange={setPw} bind={field('pw')} invalid={!!show('pw')} /><div className={'strength s' + sc}><i /><i /><i /><i /></div><span className="hint"><b className={'sc s' + sc}>{pw ? ['', 'Weak', 'Fair', 'Good', 'Strong'][sc] : ''}</b></span></Field>
+        <Field label="Confirm new password" error={show('pw2')}><PwInput mode="new-password" value={pw2} onChange={setPw2} bind={field('pw2')} invalid={!!show('pw2')} /></Field>
         <button className="btn primary xl" type="submit" style={{ marginTop: 6 }} disabled={busy}>{busy ? 'Saving…' : 'Save new password'}</button>
       </form>
     </AuthFrame>

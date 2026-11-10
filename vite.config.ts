@@ -1,11 +1,6 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
-/** The origin of the API from VITE_API_URL, or '' in mock mode. */
-function apiOrigin(raw: string | undefined): string {
-  try { const u = new URL(raw ?? ''); return u.protocol === 'https:' || u.protocol === 'http:' ? u.origin : ''; } catch { return ''; }
-}
-
 /* Content-Security-Policy. SECURITY.md has the same policy for the production server.
    - script-src 'self': no inline scripts, no eval. The theme script is /theme-init.js.
    - style-src 'self': React sets styles through the CSSOM, which CSP allows. If a library ever needs
@@ -48,11 +43,14 @@ function cspMeta(api: string): Plugin {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
-  const api = apiOrigin(env.VITE_API_URL);
+  // The API is same-origin (/api/v1), so connect-src stays 'self'. In dev, Vite forwards /api/v1 to Django.
+  const api = '';
+  const target = (env.VITE_DEV_PROXY_TARGET ?? '').trim();
+  if (mode === 'development' && !target && env.VITE_USE_MOCK_API !== 'true') console.warn('VITE_DEV_PROXY_TARGET is not set: /api/v1 will not be forwarded. See .env.example.');
   return {
     plugins: [react(), cspMeta(api)],
     envPrefix: 'VITE_',
-    server: { port: 5173, headers: SECURITY_HEADERS },
+    server: { port: 5173, headers: SECURITY_HEADERS, proxy: target ? { '/api/v1': { target } } : undefined },
     // The preview server serves the production build, so it sends the full header set including the CSP.
     preview: { port: 4173, headers: { ...SECURITY_HEADERS, 'Content-Security-Policy': csp(api, true) } },
     build: { sourcemap: false, assetsInlineLimit: 0 },

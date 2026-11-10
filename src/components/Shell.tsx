@@ -97,9 +97,9 @@ export function Shell() {
           </div>
           <button className="icon-btn" aria-label="Toggle theme" onClick={() => setTheme(dark ? 'light' : 'dark')}><Icon n={dark ? 'sun' : 'moon'} /></button>
           <div style={{ position: 'relative' }}>
-            <button className="me-avatar" aria-label="Account" onClick={() => setMe(!me)}>MB</button>
+            <button className="me-avatar" aria-label="Account" onClick={() => setMe(!me)}>{(s.user?.name ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('')}</button>
             <Pop open={me} onClose={() => setMe(false)} style={{ top: 44, right: 0 }}>
-              <div style={{ padding: '8px 10px' }}><b>Mahad Baig</b><div className="muted mono" style={{ fontSize: 12 }}>mahad@acme.co</div></div>
+              <div style={{ padding: '8px 10px' }}><b>{s.user?.name}</b><div className="muted mono" style={{ fontSize: 12 }}>{s.user?.email}</div></div>
               <button className="menu-item" onClick={() => { setMe(false); nav('/app/settings/profile') }}><Icon n="settings" s={15} />Settings</button>
               <button className="menu-item danger" onClick={() => { setMe(false); void api.auth.logout().finally(() => { clearWorkspace(); nav('/sign-in', { replace: true }) }) }}><Icon n="logout" s={15} />Sign out</button>
             </Pop>

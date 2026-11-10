@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { demo, expectNoText, expectText, forceFill, watch } from './helpers'
+import { demo, expectNoText, expectText, forceFill, leave, watch } from './helpers'
 
 test.describe('sign in', () => {
   test('required, format, and normalisation', async ({ page }) => {
@@ -7,8 +7,8 @@ test.describe('sign in', () => {
     await page.locator('button[type=submit]').click()
     await expectText(page, 'Enter your email address.'); await expectText(page, 'Enter your password.')
     const email = page.locator('input[type=email]')
-    await email.fill('ali@raza'); await email.blur(); await expectText(page, 'Enter a valid email address, like name@company.com.')
-    await email.fill('  ALI@Raza.COM '); await email.blur(); await expect(email).toHaveValue('ali@raza.com')
+    await email.fill('ali@raza'); await leave(email); await expectText(page, 'Enter a valid email address, like name@company.com.')
+    await email.fill('  ALI@Raza.COM '); await leave(email); await expect(email).toHaveValue('ali@raza.com')
   })
   test('field attributes: types, autocomplete, limits', async ({ page }) => {
     await page.goto('/sign-in')
@@ -45,22 +45,22 @@ test.describe('sign up', () => {
     await page.goto('/sign-up'); await page.locator('button[type=submit]').click()
     for (const m of ['Enter the full name.', 'Enter the company name.', 'Enter your email address.', 'Enter a password.']) await expectText(page, m)
     const f = page.locator('form input'); await f.nth(1).fill('Raza Traders'); await f.nth(2).fill('ali@razatraders.com'); await f.nth(3).fill('Zebra-Moon-77')
-    for (const ok of ["O'Brien", 'José Álvarez', 'Anne-Marie Dubois', '李雷', 'محمد علي']) { await f.nth(0).fill(ok); await f.nth(0).blur(); await expect(page.locator('form')).not.toContainText(/Use letters|cannot contain|too short/) }
+    for (const ok of ["O'Brien", 'José Álvarez', 'Anne-Marie Dubois', '李雷', 'محمد علي']) { await f.nth(0).fill(ok); await leave(f.nth(0)); await expect(page.locator('form')).not.toContainText(/Use letters|cannot contain|too short/) }
     for (const [bad, msg] of [['12345', 'Use letters in the name.'], ['<b>Ali</b>', 'cannot contain'], ['A', 'too short'], ['​​​', /Enter the full name|too short/]] as const) {
-      await f.nth(0).fill(bad); await f.nth(0).blur(); await expectText(page, msg)
+      await f.nth(0).fill(bad); await leave(f.nth(0)); await expectText(page, msg)
     }
     await f.nth(0).fill('x'.repeat(10_000)); expect((await f.nth(0).inputValue()).length).toBe(80)
-    await forceFill(f.nth(0), 'x'.repeat(10_000)); await f.nth(0).blur(); await expectText(page, 'under 80')
+    await forceFill(f.nth(0), 'x'.repeat(10_000)); await leave(f.nth(0)); await expectText(page, 'under 80')
   })
   test('password rules, and the password is never trimmed', async ({ page }) => {
     await page.goto('/sign-up'); const f = page.locator('form input'); const pw = page.locator('input[type=password]')
     await expect(pw).toHaveAttribute('autocomplete', 'new-password'); await expect(f.nth(0)).toHaveAttribute('autocomplete', 'name')
     await f.nth(0).fill('Ali Raza'); await f.nth(1).fill('Raza Traders'); await f.nth(2).fill('razatraders@example.com')
     for (const [p, msg] of [['Ab1', 'at least 8'], ['abcdefg1', 'upper and lower'], ['Abcdefgh', 'number'], ['Password1', 'too common'], ['Razatraders99', 'email']] as const) {
-      await pw.fill(p); await pw.blur(); await expectText(page, new RegExp(msg))
+      await pw.fill(p); await leave(pw); await expectText(page, new RegExp(msg))
     }
-    await forceFill(pw, 'Aa1' + 'x'.repeat(130)); await pw.blur(); await expectText(page, /at most 128/)
-    await pw.fill('  Correct Horse 9!  '); await pw.blur(); await expect(pw).toHaveValue('  Correct Horse 9!  ')
+    await forceFill(pw, 'Aa1' + 'x'.repeat(130)); await leave(pw); await expectText(page, /at most 128/)
+    await pw.fill('  Correct Horse 9!  '); await leave(pw); await expect(pw).toHaveValue('  Correct Horse 9!  ')
   })
   test('the email stays out of the URL, and the code has a lock', async ({ page }) => {
     await page.goto('/sign-up'); const f = page.locator('form input')
@@ -109,7 +109,7 @@ test.describe('password reset', () => {
     await page.goto('/new-password?token=demo-999'); await expect(page.getByRole('button', { name: 'Save new password' })).toBeVisible()
     expect(page.url()).not.toContain('token'); const pws = page.locator('input[type=password]')
     await pws.nth(0).fill('Tr1cky-Horse'); await pws.nth(1).fill('Tr1cky-Horse'); await page.getByRole('button', { name: 'Save new password' }).click()
-    await expectText(page, 'not valid or has expired')
+    await expectText(page, 'This link is not valid')
     await page.goto('/new-password?token=<script>alert(1)</script>'); await expectText(page, 'This link is not valid'); await expectNoText(page, 'alert(1)')
   })
 })
